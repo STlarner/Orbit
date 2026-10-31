@@ -10,7 +10,7 @@ isolation. It has no DI container, logger, URL parser or app-specific models.
 ## Installation
 
 ```swift
-.package(url: "https://github.com/STlarner/Orbit.git", exact: "0.1.1")
+.package(url: "https://github.com/STlarner/Orbit.git", exact: "0.2.0")
 ```
 
 Add the `Orbit` product to your target. While the repository is private, both
@@ -74,6 +74,7 @@ orbit.popToRoot()
 orbit.popTo(DetailRoute.self) // Last occurrence of this exact type.
 orbit.popTo(routeInstance)   // An exact entry.
 orbit.selectTab(TasksTab())
+orbit.selectTab(TasksTab(), replacingPath: [resolvedRoute])
 orbit.present(ProfileRoute(), style: .sheet)
 orbit.present(OnboardingRoute(), style: .fullScreen)
 orbit.dismiss()              // No need to know the presentation style.
@@ -103,11 +104,19 @@ equality and registry keys use concrete type identity, even across modules.
 Empty tab lists have `selectedTab == nil`; unknown tabs and duplicate types
 produce diagnostics rather than force unwraps or dictionary crashes.
 
-For a resolved deep-link destination, atomically update stack and selection:
+Tab selection has one operation with an optional replacement path:
 
 ```swift
-orbit.tabs.navigate(to: TasksTab(), path: [resolvedRoute])
+orbit.tabs.select(TasksTab()) // Select and preserve the existing stack.
+orbit.tabs.select(TasksTab(), replacingPath: [resolvedRoute])
+orbit.tabs.select(TasksTab(), replacingPath: []) // Select the root screen.
 ```
+
+Omitting `replacingPath` (or passing `nil`) preserves the stack. Passing an
+array replaces the entire stack, not just its last destination. Other tabs'
+stacks are unchanged. An invalid tab or replacement path rejects the operation
+without changing selection or stack. The environment router exposes the same
+behavior through `selectTab(_:replacingPath:)`.
 
 No delayed push is scheduled. The app still owns URL parsing, asynchronous
 entity resolution, request cancellation and whether an active modal should
@@ -172,6 +181,6 @@ The example is integration guidance; it is not a separate packaged app target.
 
 ## Status
 
-Version 0.1.1 is an initial, pre-1.0 API. State/lifecycle tests are included;
+Version 0.2.0 is an initial, pre-1.0 API. State/lifecycle tests are included;
 visual behavior, gestures and mixed nested presentations still require device
 or simulator validation before claiming production stability.

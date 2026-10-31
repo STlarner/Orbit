@@ -28,7 +28,9 @@ private final class MissingOrbitRouter: OrbitRouter {
     func popToRoot() { _ = missing() }
     func popTo(_ type: OrbitRoute.Type) { _ = missing() }
     func popTo(_ route: OrbitRoute) { _ = missing() }
-    func selectTab(_ tab: OrbitTab) -> Bool { missing() }
+    func selectTab(_ tab: OrbitTab, replacingPath path: [OrbitRoute]?) -> Bool {
+        missing()
+    }
     func present(_ route: OrbitRoute, style: OrbitPresentationStyle) -> Bool {
         missing()
     }

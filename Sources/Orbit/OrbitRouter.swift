@@ -6,7 +6,10 @@ public protocol OrbitRouter: AnyObject {
     func popToRoot()
     func popTo(_ type: OrbitRoute.Type)
     func popTo(_ route: OrbitRoute)
-    @discardableResult func selectTab(_ tab: OrbitTab) -> Bool
+    @discardableResult func selectTab(
+        _ tab: OrbitTab,
+        replacingPath path: [OrbitRoute]?
+    ) -> Bool
     @discardableResult func present(
         _ route: OrbitRoute,
         style: OrbitPresentationStyle
@@ -15,6 +18,11 @@ public protocol OrbitRouter: AnyObject {
 }
 
 extension OrbitRouter {
+    @discardableResult
+    public func selectTab(_ tab: OrbitTab) -> Bool {
+        selectTab(tab, replacingPath: nil)
+    }
+
     @discardableResult
     public func present(_ route: OrbitRoute) -> Bool {
         present(route, style: .sheet)

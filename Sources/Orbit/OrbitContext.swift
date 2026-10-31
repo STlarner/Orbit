@@ -46,8 +46,11 @@ public final class OrbitContext: OrbitRouter, Identifiable {
     }
 
     @discardableResult
-    public func selectTab(_ tab: OrbitTab) -> Bool {
-        owner?.tabs.select(tab) ?? false
+    public func selectTab(
+        _ tab: OrbitTab,
+        replacingPath path: [OrbitRoute]? = nil
+    ) -> Bool {
+        owner?.tabs.select(tab, replacingPath: path) ?? false
     }
 
     @discardableResult

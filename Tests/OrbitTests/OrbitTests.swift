@@ -54,11 +54,63 @@ struct OrbitTests {
         #expect(first.push(OtherRoute()))
         #expect(second.path.isEmpty)
         let route = TestRoute()
-        #expect(orbit.tabs.navigate(to: SecondTab(), path: [route]))
+        #expect(orbit.tabs.select(SecondTab(), replacingPath: [route]))
         #expect(orbit.tabs.selectedTab == SecondTab())
         #expect(second.path == [route])
         #expect(first.path.count == 1)
         #expect(!orbit.rootContext.push(TestRoute()))
+    }
+
+    @Test("Selecting a tab preserves its path unless explicitly replaced")
+    func selectionPathPolicy() throws {
+        let orbit = makeOrbit(tabs: [FirstTab(), SecondTab()])
+        orbit.setRoot(ContentRoute())
+        let first = try #require(orbit.tabs.context(for: FirstTab()))
+        let second = try #require(orbit.tabs.context(for: SecondTab()))
+        let firstRoute = TestRoute("First")
+        let secondRoute = TestRoute("Second")
+        first.push(firstRoute)
+        second.push(secondRoute)
+
+        #expect(orbit.tabs.select(SecondTab()))
+        #expect(second.path == [secondRoute])
+        #expect(orbit.tabs.select(FirstTab(), replacingPath: nil))
+        #expect(first.path == [firstRoute])
+        #expect(orbit.tabs.select(SecondTab(), replacingPath: []))
+        #expect(second.path.isEmpty)
+        #expect(first.path == [firstRoute])
+        #expect(orbit.tabs.selectedTab == SecondTab())
+    }
+
+    @Test("The environment router forwards tab selection and optional path")
+    func routerTabSelection() throws {
+        let orbit = makeOrbit(tabs: [FirstTab(), SecondTab()])
+        let router: any OrbitRouter = orbit.rootContext
+        let route = TestRoute()
+        #expect(router.selectTab(SecondTab(), replacingPath: [route]))
+        let second = try #require(orbit.tabs.context(for: SecondTab()))
+        #expect(orbit.tabs.selectedTab == SecondTab())
+        #expect(second.path == [route])
+        #expect(router.selectTab(FirstTab()))
+        #expect(second.path == [route])
+    }
+
+    @Test("Rejected replacement paths do not change either stack or selection")
+    func invalidSelectionPath() throws {
+        let orbit = makeOrbit(tabs: [FirstTab(), SecondTab()])
+        let second = try #require(orbit.tabs.context(for: SecondTab()))
+        let route = TestRoute()
+        second.push(route)
+        #expect(!orbit.tabs.select(
+            SecondTab(), replacingPath: [UnregisteredRoute()]
+        ))
+        #expect(orbit.tabs.selectedTab == FirstTab())
+        #expect(second.path == [route])
+        #expect(!orbit.tabs.select(
+            SecondTab(), replacingPath: [route, route]
+        ))
+        #expect(orbit.tabs.selectedTab == FirstTab())
+        #expect(second.path == [route])
     }
 
     @Test("Modal opened from tab is owned and dismissed by the scene host")

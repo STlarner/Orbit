@@ -8,6 +8,8 @@ Public types use the Orbit prefix; `Orbit` is the scene-scoped owner.
 - Route identity is per instance; tab and registry identity is per Swift type.
 - Hosts own bindings and SwiftUI presentation lifecycle, not destination views.
 - Preserve presented flows when replacing the root; dismiss is explicit.
+- Tab selection is `select(_:replacingPath:)` (or router `selectTab`): nil
+  preserves its stack; an array replaces it; [] selects its root screen.
 - Use Swift Testing and hand-written test doubles. Do not run tests unless asked.
 - Build the library and test targets after Swift changes.
 - Update README and CHANGELOG when changing public contracts.

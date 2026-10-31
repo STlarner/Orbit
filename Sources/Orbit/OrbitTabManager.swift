@@ -31,25 +31,22 @@ public final class OrbitTabManager {
         return context
     }
 
+    /// Selects a tab, preserving its stack unless a replacement is provided.
+    /// Pass [] to select its root screen. Invalid paths leave both the stack
+    /// and selection unchanged. No timers or delayed pushes are scheduled.
     @discardableResult
-    public func select(_ tab: OrbitTab) -> Bool {
-        guard contexts[tab] != nil else {
-            return owner?.reject("Unknown tab: \(tab.name)") ?? false
+    public func select(
+        _ tab: OrbitTab,
+        replacingPath path: [OrbitRoute]? = nil
+    ) -> Bool {
+        guard let context = context(for: tab) else { return false }
+        if let path {
+            guard context.canSetPath(path) else { return false }
+            context.updatePath(path)
         }
         selectedTab = tabs.first(where: { $0 == tab })
         owner?.emit(.tabSelected, message: tab.name)
         return true
-    }
-
-    /// Updates the target stack and selection synchronously, with no timers.
-    /// URL parsing, async data resolution and modal dismissal remain app policy.
-    @discardableResult
-    public func navigate(to tab: OrbitTab, path: [OrbitRoute]) -> Bool {
-        guard let context = context(for: tab), context.canSetPath(path) else {
-            return false
-        }
-        context.updatePath(path)
-        return select(tab)
     }
 
     func reset() {
