@@ -1,5 +1,10 @@
 # Orbit
 
+- Commit as `DiZ <10954887+STlarner@users.noreply.github.com>`.
+- Verify `git var GIT_AUTHOR_IDENT` and `git var GIT_COMMITTER_IDENT` before
+  committing. Configure identity locally for Orbit, never change the global
+  work identity. This also applies to annotated tag authors.
+
 Orbit is a dependency-free SwiftUI navigation package. Use Swift 6, explicit
 `@MainActor` isolation for navigation state, and Observation (not Combine).
 Public types use the Orbit prefix; `Orbit` is the scene-scoped owner.
