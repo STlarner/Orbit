@@ -10,7 +10,7 @@ isolation. It has no DI container, logger, URL parser or app-specific models.
 ## Installation
 
 ```swift
-.package(url: "https://github.com/STlarner/Orbit.git", exact: "0.1.0")
+.package(url: "https://github.com/STlarner/Orbit.git", exact: "0.1.1")
 ```
 
 Add the `Orbit` product to your target. While the repository is private, both
@@ -172,6 +172,6 @@ The example is integration guidance; it is not a separate packaged app target.
 
 ## Status
 
-Version 0.1.0 is an initial, pre-1.0 API. State/lifecycle tests are included;
+Version 0.1.1 is an initial, pre-1.0 API. State/lifecycle tests are included;
 visual behavior, gestures and mixed nested presentations still require device
 or simulator validation before claiming production stability.

@@ -56,6 +56,9 @@ public final class OrbitContext: OrbitRouter, Identifiable {
         style: OrbitPresentationStyle
     ) -> Bool {
         guard let owner, owner.validate(route) else { return false }
+        guard isActive else {
+            return owner.reject("The modal flow is closing.", context: self)
+        }
         #if os(macOS)
         guard style != .fullScreen else {
             return owner.reject("Full-screen covers require iOS.", context: self)
@@ -96,6 +99,9 @@ public final class OrbitContext: OrbitRouter, Identifiable {
 
     func canSetPath(_ routes: [OrbitRoute]) -> Bool {
         guard let owner else { return false }
+        guard routes.isEmpty || isActive else {
+            return owner.reject("The modal flow is closing.", context: self)
+        }
         if kind == .root, !routes.isEmpty {
             guard let root = owner.rootRoute,
                 owner.registry.registration(for: root)?.navigation == .stack
@@ -131,6 +137,14 @@ public final class OrbitContext: OrbitRouter, Identifiable {
         return presentation.context.availablePresenter()
     }
 
+    private var isActive: Bool {
+        guard kind == .modal else { return true }
+        guard let presenter, let state = presenter.presentation,
+            state.id == presentationID, state.isPresented
+        else { return false }
+        return presenter.isActive
+    }
+
     func requestDismiss(id: UUID) {
         guard let presentation, presentation.id == id,
             presentation.isPresented
@@ -144,12 +158,15 @@ public final class OrbitContext: OrbitRouter, Identifiable {
     }
 
     func completeDismiss(id: UUID) {
-        guard let presentation, presentation.id == id else { return }
+        guard let presentation, presentation.id == id,
+            !presentation.isPresented
+        else { return }
+        invalidate(presentation.context)
+        self.presentation = nil
+        // Consumers may immediately present again from the completion event.
         owner?.emit(
             .dismissed, context: presentation.context, route: presentation.route
         )
-        invalidate(presentation.context)
-        self.presentation = nil
     }
 
     private func invalidate(_ context: OrbitContext) {

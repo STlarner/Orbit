@@ -130,6 +130,39 @@ struct OrbitTests {
         #expect(orbit.rootContext.presentation == nil)
     }
 
+    @Test("A closing ancestor rejects commands from descendant modal routers")
+    func closingAncestor() throws {
+        let orbit = makeOrbit()
+        orbit.rootContext.present(TestRoute(), style: .sheet)
+        let state = try #require(orbit.rootContext.presentation)
+        state.context.present(TestRoute(), style: .sheet)
+        let nested = try #require(state.context.presentation)
+        orbit.dismissAll()
+        #expect(!nested.context.push(TestRoute()))
+        #expect(!nested.context.present(TestRoute(), style: .sheet))
+        orbit.rootContext.completeDismiss(id: state.id)
+    }
+
+    @Test("Dismissal completion releases state before calling event consumers")
+    func presentFromCompletion() throws {
+        let orbit = makeOrbit()
+        orbit.rootContext.present(TestRoute(), style: .sheet)
+        let state = try #require(orbit.rootContext.presentation)
+        let replacement = TestRoute()
+        var accepted = false
+        orbit.onEvent = { [weak orbit] event in
+            if event.kind == .dismissed {
+                accepted = orbit?.rootContext.present(replacement, style: .sheet) ?? false
+            }
+        }
+        state.context.dismiss()
+        orbit.rootContext.completeDismiss(id: state.id)
+        #expect(accepted)
+        #expect(orbit.rootContext.presentation?.route === replacement)
+        orbit.rootContext.completeDismiss(id: state.id)
+        #expect(orbit.rootContext.presentation?.route === replacement)
+    }
+
     @Test("Rejected commands leave state unchanged and emit diagnostics")
     func validation() {
         let orbit = makeOrbit(tabs: [FirstTab(), FirstTab()])
