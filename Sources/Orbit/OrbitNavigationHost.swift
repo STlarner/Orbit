@@ -3,11 +3,11 @@ import SwiftUI
 /// A stack for a tab or a root/modal flow. Destination views do not own paths,
 /// bindings or navigationDestination registration.
 @MainActor
-public struct OrbitNavigationHost<Root: View>: View {
+struct OrbitNavigationHost<Root: View>: View {
     private let context: OrbitContext
     private let root: () -> Root
 
-    public init(
+    init(
         _ context: OrbitContext,
         @ViewBuilder root: @escaping () -> Root
     ) {
@@ -15,7 +15,7 @@ public struct OrbitNavigationHost<Root: View>: View {
         self.root = root
     }
 
-    public var body: some View {
+    var body: some View {
         NavigationStack(path: Binding(
             get: { context.path },
             set: { _ = context.setPath($0) }
@@ -26,6 +26,7 @@ public struct OrbitNavigationHost<Root: View>: View {
                 }
         }
         .environment(\.orbit, context)
+        .environment(\.orbitContext, context)
     }
 
     private func destination(_ route: OrbitRoute) -> AnyView {
@@ -44,13 +45,18 @@ struct FlowContent: View {
     let context: OrbitContext
 
     var body: some View {
-        if let registration = context.owner?.registry.registration(for: route) {
+        if let tabView = context.tabView {
+            tabView
+                .environment(\.orbit, context)
+                .environment(\.orbitContext, context)
+        } else if let registration = context.owner?.registry.registration(for: route) {
             switch registration.navigation {
             case .stack:
                 OrbitNavigationHost(context) { registration.factory(route) }
             case .content:
                 registration.factory(route)
                     .environment(\.orbit, context)
+                    .environment(\.orbitContext, context)
             }
         }
     }

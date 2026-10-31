@@ -2,7 +2,7 @@ import SwiftUI
 
 extension EnvironmentValues {
     @Entry private var orbitRouter: (any OrbitRouter)? = nil
-    @Entry public var orbitTabs: OrbitTabManager? = nil
+    @Entry var orbitContext: OrbitContext? = nil
 
     /// Installed by Orbit's hosts. Missing installation fails loudly only
     /// when a command is invoked, not when rendering a standalone preview.
@@ -18,7 +18,7 @@ private final class MissingOrbitRouter: OrbitRouter {
     static let shared = MissingOrbitRouter()
 
     private func missing() -> Bool {
-        assertionFailure("Install OrbitRootHost or OrbitNavigationHost first.")
+        assertionFailure("Install OrbitRootHost before invoking navigation commands.")
         return false
     }
 

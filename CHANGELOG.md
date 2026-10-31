@@ -1,5 +1,21 @@
 # Changelog
 
+## 0.3.0
+
+- **Breaking:** create `Orbit()` without a scene-wide tab list. Register tab
+  flows with `registerTabs` and declare content via `OrbitTabView` / `OrbitTabItem`.
+- Tab managers, contexts and navigation stack hosts are now internal. Consumers
+  no longer construct selection bindings, tags, per-tab stacks or environment wiring.
+- Prepare tab flows before publishing root/presentation events; keep screen factories lazy.
+- Root and modal tab flows have independent state; routers select their nearest
+  tab container. `Orbit.selectTab` targets the root flow for service/deep-link use.
+- Reject pushing registered tab flows, including through replacement paths.
+- Add optional `OrbitTabBarVisibility` policy; default is native SwiftUI behavior.
+- **Breaking:** rename `onEvent` to `onNavigationEvent`, configured separately
+  from initialization, and document that it is observation, not interception.
+- Retire old root tab contexts on root replacement while preserving active modals.
+- Simplify the example and add regression tests for scoped tab flows and lazy setup.
+
 ## 0.2.0
 
 - **Breaking:** remove `OrbitTabManager.navigate(to:path:)`. Use the existing

@@ -1,22 +1,21 @@
 # Orbit
 
-Dependency-free, imperative navigation for SwiftUI. Screens request routes;
-Orbit's hosts own stacks, destination rendering and presentation lifecycle.
+Dependency-free, imperative navigation for SwiftUI. Declare destinations and
+tab content; Orbit handles stacks, selection, bindings and modal lifecycle.
 
-**Requirements:** Swift 6.2+, iOS 17+ or macOS 14+. Full-screen covers are iOS-only.
-The package uses Swift 6 language mode, Observation and explicit main-actor
-isolation. It has no DI container, logger, URL parser or app-specific models.
+**Requirements:** Swift 6.2+, iOS 17+ or macOS 14+. Full-screen covers and
+tab-bar visibility policies are iOS-only. Uses Observation and MainActor.
 
 ## Installation
 
 ```swift
-.package(url: "https://github.com/STlarner/Orbit.git", exact: "0.2.0")
+.package(url: "https://github.com/STlarner/Orbit.git", exact: "0.3.0")
 ```
 
-Add the `Orbit` product to your target. While the repository is private, both
-local development and CI require GitHub credentials with repository access.
+Add the `Orbit` product to your target. The repository is currently private;
+development and CI require GitHub credentials with repository access.
 
-## Start before the first screen
+## Quick start: create, register, display
 
 ```swift
 import Orbit
@@ -33,18 +32,15 @@ struct ExampleApp: App {
     @State private var orbit: Orbit
 
     init() {
-        let navigation = Orbit()
-        navigation.register(HomeRoute.self) { _ in HomeView() }
-        navigation.register(DetailRoute.self) { route in Text(route.title) }
-        _orbit = State(initialValue: navigation)
+        let orbit = Orbit()
+        orbit.register(HomeRoute.self) { _ in HomeView() }
+        orbit.register(DetailRoute.self) { route in Text(route.title) }
+        orbit.setRoot(HomeRoute())
+        _orbit = State(initialValue: orbit)
     }
 
     var body: some Scene {
-        WindowGroup {
-            OrbitRootHost(orbit) {
-                ProgressView().task { orbit.setRoot(HomeRoute()) }
-            }
-        }
+        WindowGroup { OrbitRootHost(orbit) }
     }
 }
 
@@ -52,19 +48,93 @@ struct HomeView: View {
     @Environment(\.orbit) private var orbit
 
     var body: some View {
-        Button("Open detail") {
-            orbit.push(DetailRoute(title: "Detail"))
+        Button("Open detail") { orbit.push(DetailRoute(title: "Detail")) }
+    }
+}
+```
+
+Create one `Orbit` per scene and install one `OrbitRootHost`. No screen needs
+its own NavigationStack, binding, context lookup or destination registration.
+For asynchronous launch routing, use `OrbitRootHost(orbit) { SplashView() }`:
+the placeholder receives the same environment API and can call `setRoot`.
+
+## Tabs: declare content, not infrastructure
+
+Use `registerTabs` for a root or modal that starts an independent tab flow:
+
+```swift
+orbit.registerTabs(HomeTabsRoute.self) { _ in
+    OrbitTabView {
+        OrbitTabItem(HomeTab()) {
+            HomeView()
+        } label: {
+            Label("Home", systemImage: "house")
+        }
+
+        OrbitTabItem(TasksTab()) {
+            TasksView()
+        } label: {
+            Label("Tasks", systemImage: "checklist")
         }
     }
 }
 ```
 
-Create one `Orbit` per scene, keep it alive, and install one `OrbitRootHost`
-outside the root route. The placeholder receives a router too, so a splash
-screen can resolve and set the first root. `Orbit` itself does not have an
-implicit push target; use the environment router or an explicit tab context.
+`HomeTabsRoute` subclasses `OrbitRoute`; `HomeTab` and `TasksTab` subclass
+`OrbitTab`. Tab identity is its Swift type, not its display name. The builder
+also supports conditions and loops. The declaration is fixed for the lifetime
+of that flow; start a new root/modal to change its tab configuration.
 
-## Commands
+Orbit creates the TabView, selection binding, tags, environment routers and
+one stack per tab. There is no tab list in `Orbit()` and no public tab manager
+or navigation context to assemble. Content and label closures are lazy:
+preparing a root does not instantiate tab screens or their ViewModels.
+
+Select a tab from a screen with the same navigation API:
+
+```swift
+orbit.selectTab(TasksTab()) // Preserve its stack.
+orbit.selectTab(TasksTab(), replacingPath: [taskRoute]) // Replace its stack.
+orbit.selectTab(TasksTab(), replacingPath: []) // Show its root screen.
+```
+
+Omitted/nil paths preserve the stack. Arrays replace it; other tab stacks
+remain unchanged. Invalid tabs/paths reject the entire operation.
+The screen's router targets its nearest tab container. A modal with its own
+tabs has independent selection and history, even using the same tab types.
+An ordinary modal inherits its presenting flow's tab-selection scope.
+
+The scene-owned `Orbit.selectTab` targets the root's tab container, useful for
+deep links from services. It is ready synchronously after `setRoot`, before
+SwiftUI renders the screens. URL parsing, async entity resolution, cancellation
+and whether to dismiss an active modal remain app policy.
+
+### Tab-bar visibility
+
+The default preserves SwiftUI behavior. Choose a policy only if needed:
+
+```swift
+OrbitTabView(tabBarVisibility: .hiddenOnPush) { /* tab items */ }
+OrbitTabView(tabBarVisibility: .visible) { /* tab items */ }
+```
+
+Policies are visual, not different kinds of push. Screen content can still
+use normal SwiftUI modifiers. macOS ignores iOS tab-bar visibility policies.
+
+### Root/modal tab flows, not pushed tab stacks
+
+```swift
+orbit.setRoot(HomeTabsRoute())
+orbit.present(SettingsTabsRoute(), style: .sheet)
+```
+
+Each `registerTabs` route starts its own tab flow. Pushing such a route (or
+including it in a replacement path) is rejected explicitly: Orbit does not
+promise nested independent NavigationStacks inside a pushed tab container.
+A normal SwiftUI TabView that merely groups content may still be pushed as a
+regular route; it does not create independent Orbit stacks per tab.
+
+## Navigation commands
 
 ```swift
 orbit.setRoot(HomeRoute())
@@ -73,101 +143,57 @@ orbit.pop()
 orbit.popToRoot()
 orbit.popTo(DetailRoute.self) // Last occurrence of this exact type.
 orbit.popTo(routeInstance)   // An exact entry.
-orbit.selectTab(TasksTab())
-orbit.selectTab(TasksTab(), replacingPath: [resolvedRoute])
 orbit.present(ProfileRoute(), style: .sheet)
 orbit.present(OnboardingRoute(), style: .fullScreen)
-orbit.dismiss()              // No need to know the presentation style.
+orbit.dismiss()              // Regardless of modal style.
 ```
 
-Mutating commands that can be rejected return `Bool` (`@discardableResult`).
-Empty-stack pops and dismiss without a presentation are harmless no-ops.
-`OrbitRouter` has no SwiftUI rendering or binding methods.
+Screens read `@Environment(\.orbit)`, which exposes an `OrbitRouter` scoped
+to that screen's stack/flow. The scene-owned `Orbit` has root, tab selection,
+presentation and `dismissAll` commands, but no ambiguous implicit push target.
 
-## Tabs
+- Root/modal routes default to a host-owned stack. Pushed views are rendered
+  directly, never wrapped in another stack. Do not nest your own stack there.
+- `setRoot` retires the old root and its tab stacks. Active modals remain alive:
+  onboarding can replace the root behind itself, then dismiss. An independent
+  modal tab flow keeps its own state. `Orbit.dismissAll()` closes all modals.
+- The first modal is hosted outside the tab container. Each next modal is
+  hosted by its predecessor and has its own identity, stack and lifecycle.
+- Swipe, SwiftUI `Environment.dismiss` and programmatic dismissal converge
+  through host bindings and `onDismiss`. Contexts are released after animation.
+- New presentations while the target modal chain is closing are rejected, not
+  timed or queued. A completed `.dismissed` event may request the next modal.
+- Commands that can be rejected return `Bool` (`@discardableResult`). Empty
+  stack pops and dismiss without a presentation are harmless no-ops.
+- Routes use instance identity. Create a new instance per stack entry;
+  duplicate occurrences of the same instance are rejected. Payloads belong to
+  the app, and routes are not automatically Codable or Sendable.
 
-Define subclasses of `OrbitTab`, then initialize:
+For unusual non-stack roots/modals, `register(_:navigation: .content)` remains
+an advanced opt-out. Tab flows use `registerTabs`, not this low-level option.
 
-```swift
-let orbit = Orbit(tabs: [HomeTab(), TasksTab()])
-orbit.register(TabsRoute.self, navigation: .content) { _ in TabsView() }
-```
-
-In `TabsView`, read `@Environment(\.orbitTabs)`, and use the manager's
-`selectedTab` with a binding that calls `select`. Tag tabs with
-`HomeTab() as OrbitTab?` / `TasksTab() as OrbitTab?`. Wrap each tab's root
-content in `OrbitNavigationHost(context)` using `tabs.context(for:)`.
-See [the complete example](Examples/OrbitDemo.swift).
-
-Every tab has an independent stack. Names are diagnostic labels only: tab
-equality and registry keys use concrete type identity, even across modules.
-Empty tab lists have `selectedTab == nil`; unknown tabs and duplicate types
-produce diagnostics rather than force unwraps or dictionary crashes.
-
-Tab selection has one operation with an optional replacement path:
-
-```swift
-orbit.tabs.select(TasksTab()) // Select and preserve the existing stack.
-orbit.tabs.select(TasksTab(), replacingPath: [resolvedRoute])
-orbit.tabs.select(TasksTab(), replacingPath: []) // Select the root screen.
-```
-
-Omitting `replacingPath` (or passing `nil`) preserves the stack. Passing an
-array replaces the entire stack, not just its last destination. Other tabs'
-stacks are unchanged. An invalid tab or replacement path rejects the operation
-without changing selection or stack. The environment router exposes the same
-behavior through `selectTab(_:replacingPath:)`.
-
-No delayed push is scheduled. The app still owns URL parsing, asynchronous
-entity resolution, request cancellation and whether an active modal should
-be dismissed first. `Orbit` does not impose authentication/onboarding policy.
-
-## Roots, stacks and presentations
-
-- Registration defaults to `.stack`: when a route starts a root or modal flow,
-  Orbit provides its `NavigationStack`. Do not add another stack in that view.
-- Register tab containers or custom non-stack flows with `.content`.
-- Pushed destinations are rendered directly, never wrapped in another stack.
-- `setRoot` resets root and tab paths and selects the first tab. It preserves
-  active modals deliberately: onboarding can replace the root behind itself,
-  then call `dismiss`. Call `Orbit.dismissAll()` to close the full modal chain.
-- A presentation from a tab is hosted outside `TabView`. Nested presentations
-  are hosted by the preceding modal. There is no public global/local target.
-- Each modal has its own context and presentation identity. A nested router's
-  `dismiss` closes its own flow, leaving its parent modal open.
-- Programmatic dismissal, swipe dismissal and SwiftUI `Environment.dismiss`
-  converge through host bindings and `onDismiss`. Contexts remain retained
-  until dismissal completes, then their descendants are invalidated/released.
-- Requests to present while a modal in the target chain is closing are
-  rejected. They are not silently queued or timed. Retry after `.dismissed`.
-
-Payloads belong to the app. Routes use instance identity; create a new instance
-for every stack entry. Duplicate occurrences of the same instance are rejected.
-Routes are not automatically `Codable` or `Sendable`; restoration is not part
-of this initial release.
-
-## Diagnostics, without a logger dependency
+## Optional navigation diagnostics
 
 ```swift
-let orbit = Orbit(diagnostics: .assertInDebug)
-orbit.onEvent = { event in
-    // Adapt to your logger or analytics. Runs synchronously on MainActor.
+let orbit = Orbit()
+orbit.onNavigationEvent = { event in
+    // Adapt to your logger or analytics; runs synchronously on MainActor.
     print(event.kind, event.routeName ?? "", event.path, event.message)
 }
 ```
 
-Default diagnostics assert in debug builds and reject safely in release.
-Use `.eventsOnly` for tests or a custom recovery policy. Register routes before
-navigating; missing factories and duplicate registrations emit `.rejected`
-without changing state. No route payload is included in events.
-Path events include interactive back navigation. Presentation events include
-request, dismissal request and completed dismissal.
+This callback observes navigation events and rejected commands. It is **not an
+interceptor** and does not approve or block requests. It is optional and has no
+logger dependency. Events contain identities/names, never route payloads.
+Path events include back gestures; dismissal events include interactive close.
+Avoid retain cycles when capturing the scene owner in a callback.
 
-Avoid callback retain cycles (capture the owner weakly if necessary).
-Factories are shared by reference, so registrations are available to all
-existing tab/modal contexts without copying or manual wiring.
+Default diagnostics assert in debug and reject safely in release. Use
+`Orbit(diagnostics: .eventsOnly)` for tests or a custom recovery policy.
+Missing/duplicate registrations and empty/duplicate tab declarations are
+reported without changing the current root, modal or stack.
 
-## Development
+## Development and status
 
 ```sh
 swift build --build-tests
@@ -175,12 +201,10 @@ xcodebuild -scheme Orbit -destination 'generic/platform=iOS Simulator' \
   CODE_SIGNING_ALLOWED=NO build-for-testing
 ```
 
-These commands compile the library and tests without running them. Run
-`swift test` or Xcode's test action when you explicitly want test execution.
-The example is integration guidance; it is not a separate packaged app target.
+These compile library and tests without execution. Run tests explicitly with
+`swift test` or Xcode's test action. See [the complete app example](Examples/OrbitDemo.swift).
 
-## Status
-
-Version 0.2.0 is an initial, pre-1.0 API. State/lifecycle tests are included;
-visual behavior, gestures and mixed nested presentations still require device
-or simulator validation before claiming production stability.
+Version 0.3.0 is pre-1.0. Regression tests cover preparation before rendering,
+scoped modal tabs, invalidation, selection policies and presentation lifecycle.
+Gestures/visual transitions still require simulator/device validation. State
+restoration and pushed independent tab flows are not supported in this release.

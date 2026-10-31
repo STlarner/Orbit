@@ -7,30 +7,20 @@ import SwiftUI
 @Observable
 public final class Orbit {
     public private(set) var rootRoute: OrbitRoute?
-    public let tabs: OrbitTabManager
-    public let rootContext: OrbitContext
+    let rootContext: OrbitContext
 
-    @ObservationIgnored public var onEvent: (@MainActor (OrbitEvent) -> Void)?
+    /// Observes navigation state changes and rejected commands. This is not
+    /// an interceptor and cannot approve or block a navigation operation.
+    @ObservationIgnored public var onNavigationEvent: (@MainActor (OrbitEvent) -> Void)?
     @ObservationIgnored private let diagnostics: OrbitDiagnostics
     @ObservationIgnored let registry = RouteRegistry()
 
     public init(
-        tabs: [OrbitTab] = [],
-        diagnostics: OrbitDiagnostics = .assertInDebug,
-        onEvent: (@MainActor (OrbitEvent) -> Void)? = nil
+        diagnostics: OrbitDiagnostics = .assertInDebug
     ) {
         self.diagnostics = diagnostics
-        self.onEvent = onEvent
-        self.tabs = OrbitTabManager(tabs: tabs)
         self.rootContext = OrbitContext(kind: .root)
         rootContext.owner = self
-        self.tabs.owner = self
-        for context in self.tabs.contexts.values {
-            context.owner = self
-        }
-        if self.tabs.hadDuplicateTabs {
-            reject("Duplicate tab types; only the first instance was kept.")
-        }
     }
 
     @discardableResult
@@ -47,16 +37,50 @@ public final class Orbit {
         return true
     }
 
+    /// Registers a complete tab flow, usable as a root or a modal. The tab
+    /// declaration is prepared before navigation is published; screen content
+    /// remains lazy. No manual contexts, hosts, bindings or tags are required.
+    @discardableResult
+    public func registerTabs<R: OrbitRoute>(
+        _ type: R.Type,
+        @ViewBuilder factory: @escaping @MainActor (R) -> OrbitTabView
+    ) -> Bool {
+        guard registry.registerTabs(type, factory: factory) else {
+            return reject("Route type already registered: \(type.routeName)")
+        }
+        return true
+    }
+
     /// Replaces the root and resets root/tab stacks. Presented flows remain
     /// alive, allowing a modal to replace the root behind itself then dismiss.
     @discardableResult
     public func setRoot(_ route: OrbitRoute) -> Bool {
         guard validate(route) else { return false }
+        let tabView = registry.registration(for: route)?.tabsFactory?(route)
+        guard validateTabs(tabView) else { return false }
         rootContext.resetPath()
-        tabs.reset()
+        rootContext.installTabs(tabView)
         rootRoute = route
         emit(.rootChanged, context: rootContext, route: route)
         return true
+    }
+
+    /// Selects a tab in the current root flow. Screens use their environment
+    /// router to target their nearest tab container (including modal tabs).
+    @discardableResult
+    public func selectTab(
+        _ tab: OrbitTab,
+        replacingPath path: [OrbitRoute]? = nil
+    ) -> Bool {
+        rootContext.selectTab(tab, replacingPath: path)
+    }
+
+    @discardableResult
+    public func present(
+        _ route: OrbitRoute,
+        style: OrbitPresentationStyle = .sheet
+    ) -> Bool {
+        rootContext.present(route, style: style)
     }
 
     /// Explicitly closes the complete modal chain, independently of style.
@@ -69,6 +93,17 @@ public final class Orbit {
     func validate(_ route: OrbitRoute) -> Bool {
         guard registry.registration(for: route) != nil else {
             return reject("Unregistered route: \(route.name)")
+        }
+        return true
+    }
+
+    func validateTabs(_ view: OrbitTabView?) -> Bool {
+        guard let view else { return true }
+        guard !view.items.isEmpty else {
+            return reject("A tab flow must declare at least one tab.")
+        }
+        guard Set(view.items.map(\.tab)).count == view.items.count else {
+            return reject("A tab flow declares the same tab type more than once.")
         }
         return true
     }
@@ -88,7 +123,7 @@ public final class Orbit {
         route: OrbitRoute? = nil,
         message: String = ""
     ) {
-        onEvent?(OrbitEvent(
+        onNavigationEvent?(OrbitEvent(
             kind: kind,
             contextID: context?.id,
             routeName: route?.name,

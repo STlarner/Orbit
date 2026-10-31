@@ -3,58 +3,67 @@ import Observation
 
 @MainActor
 @Observable
-public final class OrbitContext: OrbitRouter, Identifiable {
-    public let id = UUID()
-    public private(set) var path: [OrbitRoute] = []
+final class OrbitContext: OrbitRouter, Identifiable {
+    let id = UUID()
+    private(set) var path: [OrbitRoute] = []
 
     enum Kind { case root, tab, modal }
     @ObservationIgnored let kind: Kind
     @ObservationIgnored weak var owner: Orbit?
     @ObservationIgnored weak var presenter: OrbitContext?
     @ObservationIgnored var presentationID: UUID?
+    @ObservationIgnored weak var tabScope: OrbitContext?
     var presentation: PresentationState?
+    private(set) var tabView: OrbitTabView?
+    private(set) var tabManager: OrbitTabManager?
 
     init(kind: Kind) { self.kind = kind }
 
     @discardableResult
-    public func setRoot(_ route: OrbitRoute) -> Bool {
+    func setRoot(_ route: OrbitRoute) -> Bool {
         owner?.setRoot(route) ?? false
     }
 
     @discardableResult
-    public func push(_ route: OrbitRoute) -> Bool {
+    func push(_ route: OrbitRoute) -> Bool {
         setPath(path + [route])
     }
 
-    public func pop() {
+    func pop() {
         guard !path.isEmpty else { return }
         updatePath(Array(path.dropLast()))
     }
 
-    public func popToRoot() { resetPath() }
+    func popToRoot() { resetPath() }
 
-    public func popTo(_ type: OrbitRoute.Type) {
+    func popTo(_ type: OrbitRoute.Type) {
         guard let index = path.lastIndex(where: {
             ObjectIdentifier(Swift.type(of: $0)) == ObjectIdentifier(type)
         }) else { return }
         updatePath(Array(path[...index]))
     }
 
-    public func popTo(_ route: OrbitRoute) {
+    func popTo(_ route: OrbitRoute) {
         guard let index = path.lastIndex(of: route) else { return }
         updatePath(Array(path[...index]))
     }
 
     @discardableResult
-    public func selectTab(
+    func selectTab(
         _ tab: OrbitTab,
         replacingPath path: [OrbitRoute]? = nil
     ) -> Bool {
-        owner?.tabs.select(tab, replacingPath: path) ?? false
+        guard let manager = nearestTabManager else {
+            return owner?.reject("This flow has no tab container.", context: self) ?? false
+        }
+        guard isActive else {
+            return owner?.reject("The modal flow is closing.", context: self) ?? false
+        }
+        return manager.select(tab, replacingPath: path)
     }
 
     @discardableResult
-    public func present(
+    func present(
         _ route: OrbitRoute,
         style: OrbitPresentationStyle
     ) -> Bool {
@@ -67,15 +76,19 @@ public final class OrbitContext: OrbitRouter, Identifiable {
             return owner.reject("Full-screen covers require iOS.", context: self)
         }
         #endif
-        // A tab is not a presentation owner. The scene hosts the first modal;
-        // each modal hosts the next one. No public global/local distinction.
-        let start = kind == .tab ? owner.rootContext : self
+        let tabView = owner.registry.registration(for: route)?.tabsFactory?(route)
+        guard owner.validateTabs(tabView) else { return false }
+        // Tabs delegate to their enclosing root/modal flow host. Each modal
+        // hosts the next one; this hierarchy stays out of the public API.
+        let start = kind == .tab ? (tabScope ?? owner.rootContext) : self
         guard let host = start.availablePresenter() else {
             return owner.reject("A presentation is closing.", context: self)
         }
         let child = OrbitContext(kind: .modal)
         child.owner = owner
         child.presenter = host
+        child.tabScope = host.tabContainerScope ?? tabContainerScope
+        child.installTabs(tabView)
         let state = PresentationState(route: route, style: style, context: child)
         child.presentationID = state.id
         host.presentation = state
@@ -83,18 +96,18 @@ public final class OrbitContext: OrbitRouter, Identifiable {
         return true
     }
 
-    public func dismiss() {
+    func dismiss() {
         if let presenter, let presentationID {
             presenter.requestDismiss(id: presentationID)
         } else if let presentation {
             requestDismiss(id: presentation.id)
         } else if kind == .tab {
-            owner?.rootContext.dismiss()
+            tabScope?.dismiss()
         }
     }
 
     @discardableResult
-    public func setPath(_ routes: [OrbitRoute]) -> Bool {
+    func setPath(_ routes: [OrbitRoute]) -> Bool {
         guard canSetPath(routes) else { return false }
         updatePath(routes)
         return true
@@ -123,7 +136,15 @@ public final class OrbitContext: OrbitRouter, Identifiable {
         guard Set(routes).count == routes.count else {
             return owner.reject("A route instance occurs twice in a stack.", context: self)
         }
-        return routes.allSatisfy { owner.validate($0) }
+        return routes.allSatisfy { route in
+            guard owner.validate(route) else { return false }
+            guard owner.registry.registration(for: route)?.tabsFactory == nil else {
+                return owner.reject(
+                    "Tab flows cannot be pushed. Use setRoot or present.", context: self
+                )
+            }
+            return true
+        }
     }
 
     func updatePath(_ routes: [OrbitRoute]) {
@@ -134,6 +155,32 @@ public final class OrbitContext: OrbitRouter, Identifiable {
 
     func resetPath() { updatePath([]) }
 
+    func installTabs(_ view: OrbitTabView?) {
+        clearTabs()
+        tabView = view
+        if let view {
+            tabManager = OrbitTabManager(tabs: view.items.map(\.tab), flow: self)
+        }
+    }
+
+    private var nearestTabManager: OrbitTabManager? {
+        tabManager ?? tabScope?.nearestTabManager
+    }
+
+    private var tabContainerScope: OrbitContext? {
+        tabManager != nil ? self : tabScope
+    }
+
+    private func clearTabs() {
+        let previous = tabManager
+        tabManager = nil
+        tabView = nil
+        guard let previous else { return }
+        for context in previous.contexts.values {
+            invalidate(context)
+        }
+    }
+
     private func availablePresenter() -> OrbitContext? {
         guard let presentation else { return self }
         guard presentation.isPresented else { return nil }
@@ -141,6 +188,7 @@ public final class OrbitContext: OrbitRouter, Identifiable {
     }
 
     private var isActive: Bool {
+        if kind == .tab { return tabScope?.isActive ?? false }
         guard kind == .modal else { return true }
         guard let presenter, let state = presenter.presentation,
             state.id == presentationID, state.isPresented
@@ -174,10 +222,12 @@ public final class OrbitContext: OrbitRouter, Identifiable {
 
     private func invalidate(_ context: OrbitContext) {
         if let nested = context.presentation { invalidate(nested.context) }
+        context.clearTabs()
         context.presentation = nil
         context.path = []
         context.presenter = nil
         context.owner = nil
+        context.tabScope = nil
     }
 }
 

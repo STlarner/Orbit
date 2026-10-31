@@ -25,7 +25,7 @@ public struct OrbitRootHost<Placeholder: View>: View {
             }
         }
         .environment(\.orbit, orbit.rootContext)
-        .environment(\.orbitTabs, orbit.tabs)
+        .environment(\.orbitContext, orbit.rootContext)
         // This modifier survives setRoot and does not belong to TabView.
         .modifier(PresentationModifier(context: orbit.rootContext))
     }

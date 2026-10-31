@@ -5,6 +5,7 @@ final class RouteRegistry {
     struct Registration {
         let navigation: OrbitNavigationMode
         let factory: @MainActor (OrbitRoute) -> AnyView
+        let tabsFactory: (@MainActor (OrbitRoute) -> OrbitTabView)?
     }
 
     private var registrations: [ObjectIdentifier: Registration] = [:]
@@ -16,12 +17,33 @@ final class RouteRegistry {
     ) -> Bool {
         let key = ObjectIdentifier(type)
         guard registrations[key] == nil else { return false }
-        registrations[key] = Registration(navigation: navigation) { route in
+        registrations[key] = Registration(navigation: navigation, factory: { route in
             guard let typed = route as? R else {
                 return AnyView(EmptyView())
             }
             return AnyView(factory(typed))
-        }
+        }, tabsFactory: nil)
+        return true
+    }
+
+    func registerTabs<R: OrbitRoute>(
+        _ type: R.Type,
+        factory: @escaping @MainActor (R) -> OrbitTabView
+    ) -> Bool {
+        let key = ObjectIdentifier(type)
+        guard registrations[key] == nil else { return false }
+        registrations[key] = Registration(
+            navigation: .content,
+            factory: { _ in AnyView(EmptyView()) },
+            tabsFactory: { route in
+                // The registry is keyed by this exact type, so callers only
+                // reach this factory after a successful type-key lookup.
+                guard let typed = route as? R else {
+                    return OrbitTabView {}
+                }
+                return factory(typed)
+            }
+        )
         return true
     }
 
