@@ -4,25 +4,29 @@ Imperative SwiftUI navigation with declared destinations and independent tab flo
 
 ## Overview
 
-Create an ``Orbit`` owner per window, register destination factories, then
-display them with ``OrbitRootHost``. Screens use an ``OrbitRouter`` through
-`@Environment(\.orbit)`; no view assembles navigation paths or stack hosts.
+This reference is generated from the repository's `main` branch. For a released
+API, consult its version tag. Read <doc:UsageGuide> for setup and navigation examples.
 
-A factory returning ``OrbitTabView`` starts an independent root/modal tab flow.
-Declare its content and label with ``OrbitTabItem``. Registered tab flows cannot
-be pushed inside another independent stack. Native ModifiedContent chains retain
-``OrbitTabFlow`` metadata automatically. For Group, AnyView and custom decoration,
-use `wrapped` or conform a wrapper to OrbitTabFlow; private SwiftUI storage is
-never inspected and the complete decorated content is retained for rendering.
+An ``Orbit`` instance holds a window's navigation state and destination
+factories. ``OrbitRootHost`` renders its root and modal flows. Screens receive
+an ``OrbitRouter`` through `@Environment(\.orbit)` to push, pop, select tabs,
+present a flow, or replace the root.
 
-Commands and factories are main-actor isolated. Returned success means a state
-request was accepted, not that UIKit completed an animation. Preserve one owner
-per window and cancel obsolete async work in your application before navigating.
+``OrbitTabView`` declares an independent tab flow using ``OrbitTabItem`` content
+and labels. Native ModifiedContent chains retain ``OrbitTabFlow`` metadata;
+`wrapped` preserves it through Group, AnyView, and custom decoration. The
+registered flow retains both its tab declaration and decorated rendering.
 
-The repository README contains quick-start, DI, deep-link and limitation guidance.
+Commands and factories run on the main actor. A returned success reports that
+the state request was accepted; SwiftUI performs the visual transition afterward.
+
 API symbol pages describe scopes, defaults, validation and event timing.
 
 ## Topics
+
+### Usage
+
+- <doc:UsageGuide>
 
 ### Scene ownership and rendering
 

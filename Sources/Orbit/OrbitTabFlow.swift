@@ -23,8 +23,15 @@ extension OrbitTabFlow {
     /// do not return ModifiedContent. For example:
     ///
     /// ```swift
-    /// OrbitTabView { /* tab declarations */ }
+    /// nonisolated final class HomeTab: OrbitTab {}
+    ///
+    /// @MainActor
+    /// func makeWrappedTabs() -> some View {
+    ///     OrbitTabView {
+    ///         OrbitTabItem(HomeTab()) { Text("Home") } label: { Text("Home") }
+    ///     }
     ///     .wrapped { tabs in AnyView(tabs.padding()) }
+    /// }
     /// ```
     ///
     /// - Parameter content: Builds the decorated view from this flow. Include

@@ -1,0 +1,64 @@
+name: Documentation
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: documentation-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  validate:
+    name: Build documentation and compile examples
+    runs-on: macos-26
+    timeout-minutes: 30
+    env:
+      DOCUMENTATION_REF: ${{ github.head_ref || github.ref_name }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build iOS API documentation and check comment coverage
+        run: >-
+          python3 Scripts/build_documentation.py
+          --ref-label "$DOCUMENTATION_REF"
+      - name: Compile documentation examples
+        run: python3 Scripts/check_examples.py
+      - name: Package pull request preview
+        if: github.event_name == 'pull_request'
+        run: >-
+          tar -czf "$RUNNER_TEMP/documentation-preview.tar.gz"
+          -C .build/documentation/site .
+      - name: Upload pull request preview
+        if: github.event_name == 'pull_request'
+        uses: actions/upload-artifact@v4
+        with:
+          name: documentation-preview
+          path: ${{ runner.temp }}/documentation-preview.tar.gz
+          if-no-files-found: error
+      - name: Upload Pages artifact
+        if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: .build/documentation/site
+
+  deploy:
+    name: Publish documentation
+    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+    needs: validate
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}api/
+    steps:
+      - name: Deploy GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4

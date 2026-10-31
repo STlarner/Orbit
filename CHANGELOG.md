@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased
+
+- Publish the main-branch API reference and usage guide through GitHub Pages.
+- Generate pull-request previews and validate API comments and Swift examples
+  in the documentation workflow.
+- Rewrite the public README around setup and navigation examples.
+
 ## 0.5.0
 
 - Fix tab-flow recognition through native SwiftUI ModifiedContent modifier chains.

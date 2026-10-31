@@ -23,4 +23,13 @@ Public types use the Orbit prefix; `Orbit` is the scene-scoped owner.
 - Use Swift Testing and hand-written test doubles. Do not run tests unless asked.
 - Build the library and test targets after Swift changes.
 - Update README and CHANGELOG when changing public contracts.
+- Public README is usage documentation: describe implemented behavior and
+  examples, not lists of absent dependencies or internal agent instructions.
+- Workflow guides belong in the module's DocC catalog. The public reference
+  follows main, not a release tag. GitHub Actions validates PR documentation
+  and publishes only from main; previews are downloadable artifacts.
+- `python3 Scripts/build_documentation.py` checks iOS comment coverage and
+  builds the static site with DocC warnings as errors. Then run
+  `python3 Scripts/check_examples.py` to compile all Swift documentation fences
+  and the standalone demo. These validation commands do not execute unit tests.
 - Never rewrite a published version tag; release a new version instead.
