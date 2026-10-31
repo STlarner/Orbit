@@ -51,7 +51,7 @@ public enum OrbitTabBarVisibility: Sendable {
 }
 
 /// Declare tab content here; Orbit owns selection, tags, bindings and one
-/// independent stack per tab. Register this container with `registerTabs`.
+/// independent stack per tab. `register` recognizes this return type.
 @MainActor
 public struct OrbitTabView: View {
     @Environment(\.orbitContext) private var context
@@ -89,7 +89,7 @@ public struct OrbitTabView: View {
         } else {
             Color.clear.onAppear {
                 context?.owner?.reject(
-                    "Register tab containers with Orbit.registerTabs(_:factory:)."
+                    "Return OrbitTabView directly from Orbit.register(_:factory:)."
                 )
             }
         }

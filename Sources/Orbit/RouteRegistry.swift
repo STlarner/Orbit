@@ -15,6 +15,16 @@ final class RouteRegistry {
         navigation: OrbitNavigationMode,
         factory: @escaping @MainActor (R) -> V
     ) -> Bool {
+        // Generic forwarding may hide the concrete public overload. Check
+        // result-type metadata, never the rendered view hierarchy.
+        if V.self == OrbitTabView.self {
+            return registerTabs(type) { route in
+                guard let tabs = factory(route) as? OrbitTabView else {
+                    return OrbitTabView {}
+                }
+                return tabs
+            }
+        }
         let key = ObjectIdentifier(type)
         guard registrations[key] == nil else { return false }
         registrations[key] = Registration(navigation: navigation, factory: { route in

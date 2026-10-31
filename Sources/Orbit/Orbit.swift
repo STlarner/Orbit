@@ -41,7 +41,7 @@ public final class Orbit {
     /// declaration is prepared before navigation is published; screen content
     /// remains lazy. No manual contexts, hosts, bindings or tags are required.
     @discardableResult
-    public func registerTabs<R: OrbitRoute>(
+    public func register<R: OrbitRoute>(
         _ type: R.Type,
         @ViewBuilder factory: @escaping @MainActor (R) -> OrbitTabView
     ) -> Bool {

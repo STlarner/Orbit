@@ -8,8 +8,8 @@ Public types use the Orbit prefix; `Orbit` is the scene-scoped owner.
 - Route identity is per instance; tab and registry identity is per Swift type.
 - Hosts own bindings and SwiftUI presentation lifecycle, not destination views.
 - Preserve presented flows when replacing the root; dismiss is explicit.
-- Create `Orbit()` without tabs. Use `registerTabs` with declarative
-  `OrbitTabView` / `OrbitTabItem`; managers, contexts and stack hosts are internal.
+- Create `Orbit()` without tabs. Use `register` for every destination; returning
+  `OrbitTabView` identifies a tab flow. Managers, contexts and stack hosts are internal.
 - Tab flows may be roots or modals, never pushed independent stacks. Prepare
   their declarations before publishing navigation, but keep screen factories lazy.
 - `selectTab(_:replacingPath:)` targets the router's nearest tab flow (the scene

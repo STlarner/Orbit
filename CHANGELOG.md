@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.4.0
+
+- **Breaking:** remove the public `registerTabs` API. Use `register` for every
+  destination; factories returning `OrbitTabView` are recognized as tab flows.
+- Support the concrete overload and generic factory forwarding without
+  rendering or inspecting a SwiftUI view hierarchy during registration.
+- Update the app example and add a generic-forwarding regression test.
+
 ## 0.3.0
 
 - **Breaking:** create `Orbit()` without a scene-wide tab list. Register tab

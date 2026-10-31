@@ -9,7 +9,7 @@ tab-bar visibility policies are iOS-only. Uses Observation and MainActor.
 ## Installation
 
 ```swift
-.package(url: "https://github.com/STlarner/Orbit.git", exact: "0.3.0")
+.package(url: "https://github.com/STlarner/Orbit.git", exact: "0.4.0")
 ```
 
 Add the `Orbit` product to your target. The repository is currently private;
@@ -60,10 +60,11 @@ the placeholder receives the same environment API and can call `setRoot`.
 
 ## Tabs: declare content, not infrastructure
 
-Use `registerTabs` for a root or modal that starts an independent tab flow:
+Use the same `register` API for screens and tab flows. A factory returning
+`OrbitTabView` is automatically registered as a root/modal tab flow:
 
 ```swift
-orbit.registerTabs(HomeTabsRoute.self) { _ in
+orbit.register(HomeTabsRoute.self) { _ in
     OrbitTabView {
         OrbitTabItem(HomeTab()) {
             HomeView()
@@ -128,7 +129,7 @@ orbit.setRoot(HomeTabsRoute())
 orbit.present(SettingsTabsRoute(), style: .sheet)
 ```
 
-Each `registerTabs` route starts its own tab flow. Pushing such a route (or
+Each route returning `OrbitTabView` starts its own tab flow. Pushing such a route (or
 including it in a replacement path) is rejected explicitly: Orbit does not
 promise nested independent NavigationStacks inside a pushed tab container.
 A normal SwiftUI TabView that merely groups content may still be pushed as a
@@ -170,7 +171,11 @@ presentation and `dismissAll` commands, but no ambiguous implicit push target.
   the app, and routes are not automatically Codable or Sendable.
 
 For unusual non-stack roots/modals, `register(_:navigation: .content)` remains
-an advanced opt-out. Tab flows use `registerTabs`, not this low-level option.
+an advanced opt-out. Do not specify it for tabs: return `OrbitTabView` and Orbit
+recognizes the flow, including when a factory is forwarded through a generic
+View parameter. Orbit checks the factory's result type, not the rendered view
+hierarchy. Wrapping a container in a Group, AnyView or a SwiftUI modifier changes
+that result type and is not inferred as a tab flow; style its tab content instead.
 
 ## Optional navigation diagnostics
 
@@ -204,7 +209,7 @@ xcodebuild -scheme Orbit -destination 'generic/platform=iOS Simulator' \
 These compile library and tests without execution. Run tests explicitly with
 `swift test` or Xcode's test action. See [the complete app example](Examples/OrbitDemo.swift).
 
-Version 0.3.0 is pre-1.0. Regression tests cover preparation before rendering,
+Version 0.4.0 is pre-1.0. Regression tests cover preparation before rendering,
 scoped modal tabs, invalidation, selection policies and presentation lifecycle.
 Gestures/visual transitions still require simulator/device validation. State
 restoration and pushed independent tab flows are not supported in this release.

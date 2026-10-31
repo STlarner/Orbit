@@ -14,7 +14,7 @@ struct OrbitDemo: App {
 
     init() {
         let orbit = Orbit()
-        orbit.registerTabs(TabsRoute.self) { _ in
+        orbit.register(TabsRoute.self) { _ in
             OrbitTabView {
                 OrbitTabItem(HomeTab()) { HomeView() } label: {
                     Label("Home", systemImage: "house")
@@ -24,7 +24,7 @@ struct OrbitDemo: App {
                 }
             }
         }
-        orbit.registerTabs(ModalTabsRoute.self) { _ in
+        orbit.register(ModalTabsRoute.self) { _ in
             OrbitTabView {
                 OrbitTabItem(HomeTab()) { ProfileView() } label: { Text("Profile") }
                 OrbitTabItem(TasksTab()) { Text("Modal tasks") } label: { Text("Tasks") }

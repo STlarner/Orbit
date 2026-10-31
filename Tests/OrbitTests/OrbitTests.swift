@@ -10,7 +10,7 @@ struct OrbitTests {
         let orbit = Orbit(diagnostics: .eventsOnly)
         orbit.register(TestRoute.self) { Text($0.value) }
         orbit.register(ContentRoute.self, navigation: .content) { _ in Text("Content") }
-        orbit.registerTabs(TabsRoute.self) { _ in
+        orbit.register(TabsRoute.self) { _ in
             OrbitTabView {
                 for tab in tabs {
                     OrbitTabItem(tab) { Text(tab.name) } label: { Text(tab.name) }
@@ -58,7 +58,7 @@ struct OrbitTests {
         let orbit = makeOrbit()
         var contentCreations = 0
         var selectedFromEvent = false
-        orbit.registerTabs(ModalTabsRoute.self) { _ in
+        orbit.register(ModalTabsRoute.self) { _ in
             OrbitTabView {
                 OrbitTabItem(FirstTab()) {
                     contentCreations += 1
@@ -77,6 +77,25 @@ struct OrbitTests {
         #expect(selectedFromEvent)
         let tabs = try #require(orbit.rootContext.tabManager)
         #expect(tabs.selectedTab == SecondTab())
+    }
+
+    @Test("Generic factory forwarding still recognizes the tab return type")
+    func genericRegistration() throws {
+        let orbit = makeOrbit()
+        func register<V: View>(
+            _ factory: @escaping @MainActor (ModalTabsRoute) -> V
+        ) -> Bool {
+            orbit.register(ModalTabsRoute.self, factory: factory)
+        }
+        #expect(register { _ in
+            OrbitTabView {
+                OrbitTabItem(FirstTab()) { Text("First") } label: { Text("First") }
+            }
+        })
+        #expect(orbit.setRoot(ModalTabsRoute()))
+        let tabs = try #require(orbit.rootContext.tabManager)
+        #expect(tabs.selectedTab == FirstTab())
+        #expect(orbit.selectTab(FirstTab()))
     }
 
     @Test("Tab contexts share late route registrations and independent paths")
@@ -174,7 +193,7 @@ struct OrbitTests {
     @Test("Root and modal tab containers have independent state and routing scope")
     func independentModalTabs() throws {
         let orbit = makeOrbit(tabs: [FirstTab(), SecondTab()])
-        orbit.registerTabs(ModalTabsRoute.self) { _ in
+        orbit.register(ModalTabsRoute.self) { _ in
             OrbitTabView {
                 OrbitTabItem(FirstTab()) { Text("Modal first") } label: { Text("First") }
                 OrbitTabItem(SecondTab()) { Text("Modal second") } label: { Text("Second") }
