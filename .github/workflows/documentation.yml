@@ -22,7 +22,9 @@ jobs:
     env:
       DOCUMENTATION_REF: ${{ github.head_ref || github.ref_name }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7.0.1
+        with:
+          persist-credentials: false
       - name: Build iOS API documentation and check comment coverage
         run: >-
           python3 Scripts/build_documentation.py
@@ -36,16 +38,17 @@ jobs:
           -C .build/documentation/site .
       - name: Upload pull request preview
         if: github.event_name == 'pull_request'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7.0.2
         with:
           name: documentation-preview
           path: ${{ runner.temp }}/documentation-preview.tar.gz
           if-no-files-found: error
       - name: Upload Pages artifact
         if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
-        uses: actions/upload-pages-artifact@v3
+        uses: actions/upload-pages-artifact@v5.0.0
         with:
           path: .build/documentation/site
+          include-hidden-files: true
 
   deploy:
     name: Publish documentation
@@ -61,4 +64,4 @@ jobs:
     steps:
       - name: Deploy GitHub Pages
         id: deployment
-        uses: actions/deploy-pages@v4
+        uses: actions/deploy-pages@v5.0.1
