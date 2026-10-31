@@ -37,4 +37,7 @@ Public types use the Orbit prefix; `Orbit` is the scene-scoped owner.
   builds the static site with DocC warnings as errors. Then run
   `python3 Scripts/check_examples.py` to compile all Swift documentation fences
   and the standalone demo. These validation commands do not execute unit tests.
+- Related quick-start fences may be grouped with `<!-- swift-example: name -->`
+  and `<!-- /swift-example -->`; the checker compiles their combined code as one
+  complete example, without substituting mock declarations.
 - Never rewrite a published version tag; release a new version instead.

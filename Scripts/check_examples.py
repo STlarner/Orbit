@@ -23,12 +23,38 @@ def examples():
                 for line in text.splitlines()
                 if line.lstrip().startswith("///")
             )
-        for index, code in enumerate(
-            re.findall(r"```swift\n(.*?)```", text, re.DOTALL), start=1
-        ):
-            if not code.strip():
-                raise SystemExit(f"Empty Swift example: {path}:{index}")
-            yield path, index, code
+        tokens = re.finditer(
+            r"<!--\s*swift-example:\s*(?P<start>[\w-]+)\s*-->"
+            r"|(?P<end><!--\s*/swift-example\s*-->)"
+            r"|```swift\n(?P<code>.*?)```",
+            text, re.DOTALL,
+        )
+        group = None
+        parts = []
+        index = 0
+        for token in tokens:
+            if token.group("start"):
+                if group is not None:
+                    raise SystemExit(f"Nested Swift example group: {path}")
+                group = token.group("start")
+                parts = []
+            elif token.group("end"):
+                if group is None or not parts:
+                    raise SystemExit(f"Unmatched or empty Swift example group: {path}")
+                index += 1
+                yield path, f"{index} ({group})", "\n\n".join(parts)
+                group = None
+            else:
+                code = token.group("code")
+                if not code.strip():
+                    raise SystemExit(f"Empty Swift example: {path}")
+                if group is not None:
+                    parts.append(code)
+                else:
+                    index += 1
+                    yield path, index, code
+        if group is not None:
+            raise SystemExit(f"Unclosed Swift example group: {path}: {group}")
 
 
 def main():

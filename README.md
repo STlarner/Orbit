@@ -8,10 +8,27 @@ The router owns navigation state for the window, including independent stacks
 for tabs and modal flows. Destination views and their dependencies are built
 by the registered factories.
 
+## Installation
+
+Add `https://github.com/STlarner/Orbit.git` as an Xcode package dependency
+and select the `Orbit` product. For a SwiftPM project:
+
+```swift
+.package(url: "https://github.com/STlarner/Orbit.git", exact: "0.5.0")
+```
+
+Requires Swift 6.2+, iOS 17+ or macOS 14+.
+
 ## Quick start
 
-Define your routes, register their destinations, and install `OrbitRootHost`
-in the window's root view:
+The following steps build a small app with a home screen and a detail screen.
+
+<!-- swift-example: quick-start -->
+
+### 1. Define the routes
+
+A route identifies a destination and carries the arguments it needs. Subclass
+`OrbitRoute` for each screen you want to open:
 
 ```swift
 import Orbit
@@ -27,6 +44,39 @@ nonisolated final class DetailRoute: OrbitRoute {
         super.init()
     }
 }
+```
+
+### 2. Configure Orbit
+
+Create an Orbit instance, register a view factory for each route, and select
+the initial root. The detail factory receives the title stored in its route:
+
+```swift
+@MainActor
+func makeOrbit() -> Orbit {
+    let orbit = Orbit()
+    orbit.register(HomeRoute.self) { _ in HomeView() }
+    orbit.register(DetailRoute.self) { route in
+        Text(route.title).navigationTitle(route.title)
+    }
+    orbit.setRoot(HomeRoute())
+    return orbit
+}
+```
+
+### 3. Install the root host
+
+Keep the configured instance in your window's root view and pass it to
+`OrbitRootHost`. The host displays the selected route and provides the router
+to its screens through the SwiftUI environment:
+
+```swift
+@MainActor
+struct AppWindow: View {
+    @State private var orbit = makeOrbit()
+
+    var body: some View { OrbitRootHost(orbit) }
+}
 
 @main
 struct ExampleApp: App {
@@ -34,24 +84,15 @@ struct ExampleApp: App {
         WindowGroup { AppWindow() }
     }
 }
+```
 
-@MainActor
-struct AppWindow: View {
-    @State private var orbit: Orbit
+Each window gets its own Orbit instance and navigation history.
 
-    init() {
-        let orbit = Orbit()
-        orbit.register(HomeRoute.self) { _ in HomeView() }
-        orbit.register(DetailRoute.self) { route in
-            Text(route.title).navigationTitle(route.title)
-        }
-        orbit.setRoot(HomeRoute())
-        _orbit = State(initialValue: orbit)
-    }
+### 4. Navigate from a screen
 
-    var body: some View { OrbitRootHost(orbit) }
-}
+Read the environment router and push a route when the button is tapped:
 
+```swift
 struct HomeView: View {
     @Environment(\.orbit) private var orbit
 
@@ -64,9 +105,7 @@ struct HomeView: View {
 }
 ```
 
-`HomeView` knows the route it wants to open. The factory decides which view
-to create and can supply its ViewModel or other dependencies. Orbit provides
-the navigation stack and back navigation.
+<!-- /swift-example -->
 
 ## Navigation
 
@@ -100,7 +139,7 @@ nonisolated final class TasksTab: OrbitTab {}
 @MainActor
 func configureTabs(in orbit: Orbit) {
     orbit.register(TabsRoute.self) { _ in
-        OrbitTabView(tabBarVisibility: .hiddenOnPush) {
+        OrbitTabView {
             OrbitTabItem(HomeTab()) {
                 Text("Home")
             } label: {
@@ -121,22 +160,6 @@ func configureTabs(in orbit: Orbit) {
 Call `configureTabs(in: orbit)` from the window's setup to use this root.
 `selectTab(tab)` preserves the selected tab's history. Pass `replacingPath`
 to replace it, or `[]` to open the tab's root screen.
-
-The tab bar uses SwiftUI's automatic visibility by default. `.hiddenOnPush`
-hides it while the tab has pushed screens; `.visible` keeps it visible.
-Tab flows can also be presented as modals with their own selection and history.
-
-## Installation
-
-Add `https://github.com/STlarner/Orbit.git` as an Xcode package dependency
-and select the `Orbit` product. For a SwiftPM project:
-
-```swift
-.package(url: "https://github.com/STlarner/Orbit.git", exact: "0.5.0")
-```
-
-Requires Swift 6.2+, iOS 17+ or macOS 14+. Full-screen covers and tab-bar
-visibility policies are available on iOS.
 
 ## Documentation and examples
 
