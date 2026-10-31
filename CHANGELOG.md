@@ -1,5 +1,23 @@
 # Changelog
 
+## 0.5.0
+
+- Fix tab-flow recognition through native SwiftUI ModifiedContent modifier chains.
+- Add OrbitTabFlow metadata and `wrapped` / OrbitWrappedTabFlow for Group, AnyView
+  and custom decoration, without private SwiftUI reflection.
+- Retain the full decorated view for rendering, while validating its original
+  tab declaration before root/modal state changes. Use one generic register API.
+- Complete multi-step mutations before delivering events. Reentrant commands
+  enqueue their events after the current batch, without recursive callbacks.
+- Add regression coverage for decorated, erased and custom tab flows, validation
+  before replacement, callback-visible selection and nested root replacement.
+
+- Document every source-declared public API with DocC parameters, results,
+  scopes, defaults, event timing and limitations; add a module documentation catalog.
+- Rewrite README with a full API reference and usage/validation guidance.
+- Correct the example and quick start to create a separate Orbit per window.
+- Record static review findings and outstanding runtime validation in REVIEW.md.
+
 ## 0.4.0
 
 - **Breaking:** remove the public `registerTabs` API. Use `register` for every

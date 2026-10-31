@@ -1,5 +1,6 @@
 import Foundation
 import Observation
+import SwiftUI
 
 @MainActor
 @Observable
@@ -15,6 +16,7 @@ final class OrbitContext: OrbitRouter, Identifiable {
     @ObservationIgnored weak var tabScope: OrbitContext?
     var presentation: PresentationState?
     private(set) var tabView: OrbitTabView?
+    private(set) var tabContent: AnyView?
     private(set) var tabManager: OrbitTabManager?
 
     init(kind: Kind) { self.kind = kind }
@@ -76,24 +78,26 @@ final class OrbitContext: OrbitRouter, Identifiable {
             return owner.reject("Full-screen covers require iOS.", context: self)
         }
         #endif
-        let tabView = owner.registry.registration(for: route)?.tabsFactory?(route)
-        guard owner.validateTabs(tabView) else { return false }
+        let tabFlow = owner.registry.registration(for: route)?.tabsFactory?(route)
+        guard owner.validateTabs(tabFlow?.declaration) else { return false }
         // Tabs delegate to their enclosing root/modal flow host. Each modal
         // hosts the next one; this hierarchy stays out of the public API.
         let start = kind == .tab ? (tabScope ?? owner.rootContext) : self
         guard let host = start.availablePresenter() else {
             return owner.reject("A presentation is closing.", context: self)
         }
-        let child = OrbitContext(kind: .modal)
-        child.owner = owner
-        child.presenter = host
-        child.tabScope = host.tabContainerScope ?? tabContainerScope
-        child.installTabs(tabView)
-        let state = PresentationState(route: route, style: style, context: child)
-        child.presentationID = state.id
-        host.presentation = state
-        owner.emit(.presented, context: child, route: route)
-        return true
+        return owner.mutate {
+            let child = OrbitContext(kind: .modal)
+            child.owner = owner
+            child.presenter = host
+            child.tabScope = host.tabContainerScope ?? tabContainerScope
+            child.installTabs(tabFlow)
+            let state = PresentationState(route: route, style: style, context: child)
+            child.presentationID = state.id
+            host.presentation = state
+            owner.emit(.presented, context: child, route: route)
+            return true
+        }
     }
 
     func dismiss() {
@@ -149,17 +153,21 @@ final class OrbitContext: OrbitRouter, Identifiable {
 
     func updatePath(_ routes: [OrbitRoute]) {
         guard path != routes else { return }
-        path = routes
-        owner?.emit(.pathChanged, context: self)
+        guard let owner else { return }
+        owner.mutate {
+            path = routes
+            owner.emit(.pathChanged, context: self)
+        }
     }
 
     func resetPath() { updatePath([]) }
 
-    func installTabs(_ view: OrbitTabView?) {
+    func installTabs(_ flow: PreparedTabFlow?) {
         clearTabs()
-        tabView = view
-        if let view {
-            tabManager = OrbitTabManager(tabs: view.items.map(\.tab), flow: self)
+        tabView = flow?.declaration
+        tabContent = flow?.content
+        if let flow {
+            tabManager = OrbitTabManager(tabs: flow.declaration.items.map(\.tab), flow: self)
         }
     }
 
@@ -175,6 +183,7 @@ final class OrbitContext: OrbitRouter, Identifiable {
         let previous = tabManager
         tabManager = nil
         tabView = nil
+        tabContent = nil
         guard let previous else { return }
         for context in previous.contexts.values {
             invalidate(context)
@@ -200,24 +209,29 @@ final class OrbitContext: OrbitRouter, Identifiable {
         guard let presentation, presentation.id == id,
             presentation.isPresented
         else { return }
-        presentation.isPresented = false
-        owner?.emit(
-            .dismissalRequested,
-            context: presentation.context,
-            route: presentation.route
-        )
+        guard let owner else { return }
+        owner.mutate {
+            presentation.isPresented = false
+            owner.emit(
+                .dismissalRequested,
+                context: presentation.context,
+                route: presentation.route
+            )
+        }
     }
 
     func completeDismiss(id: UUID) {
         guard let presentation, presentation.id == id,
             !presentation.isPresented
         else { return }
-        invalidate(presentation.context)
-        self.presentation = nil
-        // Consumers may immediately present again from the completion event.
-        owner?.emit(
-            .dismissed, context: presentation.context, route: presentation.route
-        )
+        guard let owner else { return }
+        owner.mutate {
+            invalidate(presentation.context)
+            self.presentation = nil
+            owner.emit(
+                .dismissed, context: presentation.context, route: presentation.route
+            )
+        }
     }
 
     private func invalidate(_ context: OrbitContext) {

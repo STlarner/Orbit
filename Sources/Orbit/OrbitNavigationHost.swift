@@ -45,8 +45,8 @@ struct FlowContent: View {
     let context: OrbitContext
 
     var body: some View {
-        if let tabView = context.tabView {
-            tabView
+        if let tabContent = context.tabContent {
+            tabContent
                 .environment(\.orbit, context)
                 .environment(\.orbitContext, context)
         } else if let registration = context.owner?.registry.registration(for: route) {

@@ -1,11 +1,21 @@
 import SwiftUI
 
+/// Adds Orbit's screen-scoped router dependency to SwiftUI's environment.
 extension EnvironmentValues {
     @Entry private var orbitRouter: (any OrbitRouter)? = nil
     @Entry var orbitContext: OrbitContext? = nil
 
-    /// Installed by Orbit's hosts. Missing installation fails loudly only
-    /// when a command is invoked, not when rendering a standalone preview.
+    /// The imperative router for the screen's enclosing navigation stack/flow.
+    ///
+    /// Use `@Environment(\.orbit)` in destination views. Orbit's hosts install
+    /// the appropriate router; it is not a scene-wide implicit push target.
+    /// Set a custom ``OrbitRouter`` with `.environment(\.orbit, router)` for a
+    /// standalone screen preview or test. Hosts install their own routers
+    /// inside their content, so inject overrides at the destination when needed.
+    ///
+    /// Outside a host, reading this value is allowed. Invoking a command on its
+    /// fallback asserts in debug; in release fallible commands return `false`
+    /// and void commands do nothing. There is no owner to receive rejection events.
     @MainActor
     public var orbit: any OrbitRouter {
         get { orbitRouter ?? MissingOrbitRouter.shared }

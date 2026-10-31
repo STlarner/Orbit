@@ -98,6 +98,135 @@ struct OrbitTests {
         #expect(orbit.selectTab(FirstTab()))
     }
 
+    @Test("Native modifier chains preserve tab metadata and lazy content")
+    func modifiedTabFlow() throws {
+        let orbit = makeOrbit()
+        var contentCreated = false
+        let declaration = OrbitTabView {
+            OrbitTabItem(FirstTab()) {
+                contentCreated = true
+                return Text("First")
+            } label: { Text("First") }
+            OrbitTabItem(SecondTab()) { Text("Second") } label: { Text("Second") }
+        }
+        orbit.register(ModalTabsRoute.self) { _ in
+            declaration.padding().preferredColorScheme(.dark)
+        }
+        #expect(orbit.setRoot(ModalTabsRoute()))
+        #expect(!contentCreated)
+        #expect(orbit.rootContext.tabView?.id == declaration.id)
+        #expect(orbit.rootContext.tabContent != nil)
+        #expect(orbit.selectTab(SecondTab(), replacingPath: [TestRoute()]))
+        orbit.setRoot(TestRoute())
+        #expect(!orbit.rootContext.push(ModalTabsRoute()))
+        #expect(orbit.present(ModalTabsRoute()))
+        let state = try #require(orbit.rootContext.presentation)
+        #expect(state.context.tabView?.id == declaration.id)
+        #expect(state.context.tabContent != nil)
+        #expect(state.context.selectTab(SecondTab()))
+    }
+
+    @Test("Explicit wrapping preserves metadata through Group and AnyView")
+    func erasedTabFlow() throws {
+        let orbit = makeOrbit()
+        var wrapperCreated = false
+        let declaration = OrbitTabView {
+            OrbitTabItem(FirstTab()) { Text("First") } label: { Text("First") }
+        }
+        orbit.register(ModalTabsRoute.self) { _ in
+            declaration.wrapped { tabs in
+                wrapperCreated = true
+                return AnyView(Group { tabs }.padding())
+            }
+        }
+        #expect(!wrapperCreated)
+        #expect(orbit.setRoot(ModalTabsRoute()))
+        #expect(wrapperCreated)
+        #expect(orbit.rootContext.tabView?.id == declaration.id)
+        #expect(orbit.rootContext.tabContent != nil)
+        #expect(orbit.selectTab(FirstTab()))
+    }
+
+    @Test("Custom tab-flow wrappers do not require inspecting their bodies")
+    func customTabFlow() {
+        let orbit = makeOrbit()
+        let declaration = OrbitTabView {
+            OrbitTabItem(FirstTab()) { Text("First") } label: { Text("First") }
+        }
+        orbit.register(ModalTabsRoute.self) { _ in
+            CustomTabContainer(orbitTabView: declaration)
+        }
+        #expect(orbit.setRoot(ModalTabsRoute()))
+        #expect(orbit.rootContext.tabView?.id == declaration.id)
+        #expect(orbit.selectTab(FirstTab()))
+    }
+
+    @Test("Modified invalid tab declarations reject before replacing the root")
+    func invalidModifiedFlow() {
+        let orbit = makeOrbit()
+        let originalRoot = TestRoute()
+        orbit.setRoot(originalRoot)
+        orbit.register(ModalTabsRoute.self) { _ in
+            OrbitTabView {
+                OrbitTabItem(FirstTab()) { Text("First") } label: { Text("First") }
+                OrbitTabItem(FirstTab()) { Text("Duplicate") } label: { Text("Duplicate") }
+            }
+            .padding()
+        }
+        #expect(!orbit.setRoot(ModalTabsRoute()))
+        #expect(orbit.rootRoute === originalRoot)
+        #expect(!orbit.present(ModalTabsRoute()))
+        #expect(orbit.rootContext.presentation == nil)
+    }
+
+    @Test("Tab callbacks see completed selection and nested events are delivered FIFO")
+    func reentrantTabSelection() throws {
+        let orbit = makeOrbit(tabs: [FirstTab(), SecondTab()])
+        let tabs = try #require(orbit.rootContext.tabManager)
+        let replacement = TestRoute("Replacement")
+        var events: [OrbitEvent.Kind] = []
+        var selectedBeforeCallback = false
+        var isInCallback = false
+        var wasRecursive = false
+        orbit.onNavigationEvent = { [weak orbit] event in
+            wasRecursive = wasRecursive || isInCallback
+            isInCallback = true
+            events.append(event.kind)
+            if event.kind == .pathChanged {
+                selectedBeforeCallback = tabs.selectedTab == SecondTab()
+                orbit?.setRoot(replacement)
+            }
+            isInCallback = false
+        }
+        #expect(orbit.selectTab(SecondTab(), replacingPath: [TestRoute()]))
+        #expect(selectedBeforeCallback)
+        #expect(!wasRecursive)
+        #expect(orbit.rootRoute === replacement)
+        #expect(events == [.pathChanged, .tabSelected, .rootChanged])
+    }
+
+    @Test("Root replacement from a path event cannot be overwritten by the outer command")
+    func reentrantRootReplacement() {
+        let orbit = makeOrbit()
+        orbit.setRoot(TestRoute("Original"))
+        orbit.rootContext.push(TestRoute("Pushed"))
+        let requested = TestRoute("Requested")
+        let replacement = TestRoute("Replacement")
+        var rootWasReady = false
+        var events: [OrbitEvent.Kind] = []
+        orbit.onNavigationEvent = { [weak orbit] event in
+            events.append(event.kind)
+            if event.kind == .pathChanged {
+                rootWasReady = orbit?.rootRoute === requested
+                orbit?.setRoot(replacement)
+            }
+        }
+        #expect(orbit.setRoot(requested))
+        #expect(rootWasReady)
+        #expect(orbit.rootRoute === replacement)
+        #expect(events == [.pathChanged, .rootChanged, .rootChanged])
+    }
+
     @Test("Tab contexts share late route registrations and independent paths")
     func tabsAndSharedRegistry() throws {
         let orbit = makeOrbit(tabs: [FirstTab(), SecondTab()])
@@ -378,4 +507,10 @@ nonisolated private final class FirstTab: OrbitTab {
 }
 nonisolated private final class SecondTab: OrbitTab {
     override class var tabName: String { "same-tab-name" }
+}
+
+@MainActor
+private struct CustomTabContainer: OrbitTabFlow {
+    let orbitTabView: OrbitTabView
+    var body: some View { Group { orbitTabView }.padding() }
 }

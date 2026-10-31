@@ -41,14 +41,16 @@ final class OrbitTabManager {
         _ tab: OrbitTab,
         replacingPath path: [OrbitRoute]? = nil
     ) -> Bool {
-        guard let context = context(for: tab), context.owner != nil else { return false }
+        guard let context = context(for: tab), let owner = context.owner else { return false }
         if let path {
             guard context.canSetPath(path) else { return false }
-            context.updatePath(path)
         }
-        selectedTab = tabs.first(where: { $0 == tab })
-        flow?.owner?.emit(.tabSelected, context: flow, message: tab.name)
-        return true
+        return owner.mutate {
+            if let path { context.updatePath(path) }
+            selectedTab = tabs.first(where: { $0 == tab })
+            owner.emit(.tabSelected, context: flow, message: tab.name)
+            return true
+        }
     }
 
 }

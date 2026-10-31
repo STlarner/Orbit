@@ -10,6 +10,14 @@ nonisolated final class TasksTab: OrbitTab {}
 
 @main
 struct OrbitDemo: App {
+    var body: some Scene {
+        WindowGroup { OrbitDemoWindow() }
+    }
+}
+
+// State belongs to each window, not to the App shared by every WindowGroup scene.
+@MainActor
+private struct OrbitDemoWindow: View {
     @State private var orbit: Orbit
 
     init() {
@@ -23,12 +31,14 @@ struct OrbitDemo: App {
                     Label("Tasks", systemImage: "checklist")
                 }
             }
+            .padding(8)
         }
         orbit.register(ModalTabsRoute.self) { _ in
             OrbitTabView {
                 OrbitTabItem(HomeTab()) { ProfileView() } label: { Text("Profile") }
                 OrbitTabItem(TasksTab()) { Text("Modal tasks") } label: { Text("Tasks") }
             }
+            .wrapped { tabs in AnyView(Group { tabs }.padding(8)) }
         }
         orbit.register(DetailRoute.self) { _ in Text("Detail") }
         orbit.register(ProfileRoute.self) { _ in ProfileView() }
@@ -36,8 +46,8 @@ struct OrbitDemo: App {
         _orbit = State(initialValue: orbit)
     }
 
-    var body: some Scene {
-        WindowGroup { OrbitRootHost(orbit) }
+    var body: some View {
+        OrbitRootHost(orbit)
     }
 }
 
