@@ -14,7 +14,7 @@ Add `https://github.com/STlarner/Orbit.git` as an Xcode package dependency
 and select the `Orbit` product. For a SwiftPM project:
 
 ```swift
-.package(url: "https://github.com/STlarner/Orbit.git", exact: "0.5.0")
+.package(url: "https://github.com/STlarner/Orbit.git", exact: "0.6.0")
 ```
 
 Requires Swift 6.2+, iOS 17+ or macOS 14+.
@@ -160,6 +160,70 @@ func configureTabs(in orbit: Orbit) {
 Call `configureTabs(in: orbit)` from the window's setup to use this root.
 `selectTab(tab)` preserves the selected tab's history. Pass `replacingPath`
 to replace it, or `[]` to open the tab's root screen.
+
+## Deep links
+
+Deep links are opt-in. Register a URL pattern only for destinations you want to
+expose, after registering their view factory. Orbit matches normalized paths and
+asks your resolver to build the route; URL parsing, scheme handling, dependency
+resolution and logging stay in the application.
+
+```swift
+nonisolated final class DetailRoute: OrbitRoute {
+    let title: String
+
+    init(title: String) {
+        self.title = title
+        super.init()
+    }
+}
+
+nonisolated final class DetailTab: OrbitTab {}
+
+@MainActor
+func registerDetailLinks(in orbit: Orbit) {
+    orbit.register(DetailRoute.self) { route in
+        Text(route.title)
+    }
+    orbit.registerDeepLink(
+        DetailRoute.self,
+        pattern: "detail/:id",
+        tab: DetailTab()
+    ) { parameters in
+        guard let id = parameters["id"] else { return nil }
+        return DetailRoute(title: id)
+    }
+}
+```
+
+Patterns are slash-separated. A segment beginning with `:` captures one path
+component, which is percent-decoded before it reaches the resolver. Matching is
+case-sensitive, the first registered pattern wins, and equivalent slash variants
+such as `task/:id`, `/task/:id` and `task/:id/` are one registration.
+
+`openDeepLink(path:)` resolves the route and applies the registered `tab` and
+`presentation`. `resolveDeepLink(path:)` returns the route without navigating,
+for applications that own placement:
+
+```swift
+struct DetailWindow: View {
+    let orbit: Orbit
+
+    var body: some View {
+        OrbitRootHost(orbit)
+            .onOpenURL { url in
+                Task {
+                    await orbit.openDeepLink(path: url.path)
+                }
+            }
+    }
+}
+```
+
+`openDeepLink` captures the root before awaiting, then verifies cancellation and
+root identity before navigating. A stale request therefore cannot move the user
+after the application replaced its root. Register only stable, shareable
+destinations: their patterns become part of your public contract.
 
 ## Documentation and examples
 

@@ -37,6 +37,7 @@ public final class Orbit {
     @ObservationIgnored public var onNavigationEvent: (@MainActor (OrbitEvent) -> Void)?
     @ObservationIgnored private let diagnostics: OrbitDiagnostics
     @ObservationIgnored let registry = RouteRegistry()
+    @ObservationIgnored let deepLinks = DeepLinkRegistry()
     @ObservationIgnored private var isMutating = false
     @ObservationIgnored private var isDeliveringEvents = false
     @ObservationIgnored private var pendingEvents: [OrbitEvent] = []

@@ -177,30 +177,60 @@ which supports consumer-owned recovery. A debug assertion in an observer can
 stop delivery of its pending events. Events use diagnostic names and messages,
 not localized user-facing error strings or a persistent error-code contract.
 
-## Asynchronous navigation and deep links
+## Deep links
 
-Resolve URLs, permissions, and domain entities in the application. Apply the
-result only while its request and root are still valid. The scene owner's
-`selectTab` targets root tabs, which are ready after `setRoot` before rendering:
+Deep-link support is opt-in. Register a URL pattern only for destinations whose
+URL is a stable, shareable contract. The route must already be registered with
+``Orbit/register(_:navigation:factory:)``; then
+``Orbit/registerDeepLink(_:pattern:tab:presentation:resolve:)`` maps a normalized
+path to that route. URL parsing, scheme handling, dependency resolution and
+logging stay in the application.
+
+Patterns are slash-separated. A segment beginning with `:` captures one path
+component, which is percent-decoded before it reaches the resolver. Matching is
+case-sensitive, the first registered pattern wins, and equivalent slash variants
+such as `task/:id`, `/task/:id` and `task/:id/` are one registration.
 
 ```swift
+nonisolated final class TaskRoute: OrbitRoute {
+    let taskID: String
+
+    init(taskID: String) {
+        self.taskID = taskID
+        super.init()
+    }
+}
+
+nonisolated final class TasksTab: OrbitTab {}
+
 @MainActor
-func openResolvedRoute(
-    in orbit: Orbit,
-    tab: OrbitTab,
-    resolve: () async throws -> OrbitRoute
-) async throws {
-    guard let root = orbit.rootRoute else { return }
-    let destination = try await resolve()
-    try Task.checkCancellation()
-    guard orbit.rootRoute === root else { return }
-    orbit.selectTab(tab, replacingPath: [destination])
+func registerTaskLinks(in orbit: Orbit) {
+    orbit.register(TaskRoute.self) { route in
+        Text(route.taskID)
+    }
+    orbit.registerDeepLink(
+        TaskRoute.self,
+        pattern: "task/:id",
+        tab: TasksTab()
+    ) { parameters in
+        guard let id = parameters["id"] else { return nil }
+        return TaskRoute(taskID: id)
+    }
 }
 ```
 
-Cancel obsolete requests when a newer one arrives. Whether a deep link should
-close a modal first is application policy. A router is stack/flow-scoped, so
-retaining it does not cancel work belonging to an individual popped screen.
+The resolver may await application work such as loading an entity, and returns
+`nil` when the destination is unavailable. ``Orbit/openDeepLink(path:)`` resolves
+the route and applies the registered tab and presentation.
+``Orbit/resolveDeepLink(path:)`` returns the route without navigating when the
+application owns placement.
+
+`openDeepLink` captures the root before awaiting, then verifies cancellation and
+root identity before navigating, so a stale request cannot move the user after
+the application replaced its root. Cancel obsolete requests when a newer one
+arrives. Whether a deep link should close a modal first is application policy.
+A router is stack/flow-scoped, so retaining it does not cancel work belonging to
+an individual popped screen.
 
 ## Previews and validation
 

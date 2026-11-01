@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+## 0.6.0
+
+- Add opt-in deep links: `registerDeepLink(_:pattern:tab:presentation:resolve:)`,
+  `resolveDeepLink(path:)` and `openDeepLink(path:)`. Orbit matches normalized
+  paths only; URL parsing, dependency resolution and logging stay in the app.
 - Publish the main-branch API reference and usage guide through GitHub Pages.
 - Generate pull-request previews and validate API comments and Swift examples
   in the documentation workflow.

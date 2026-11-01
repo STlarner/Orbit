@@ -44,4 +44,8 @@ final class RouteRegistry {
     func registration(for route: OrbitRoute) -> Registration? {
         registrations[ObjectIdentifier(type(of: route))]
     }
+
+    func isRegistered<R: OrbitRoute>(_ type: R.Type) -> Bool {
+        registrations[ObjectIdentifier(type)] != nil
+    }
 }
