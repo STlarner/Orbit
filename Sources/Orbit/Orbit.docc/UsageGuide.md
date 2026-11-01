@@ -183,8 +183,9 @@ Deep-link support is opt-in. Register a URL pattern only for destinations whose
 URL is a stable, shareable contract. The route must already be registered with
 ``Orbit/register(_:navigation:factory:)``; then
 ``Orbit/registerDeepLink(_:pattern:tab:presentation:resolve:)`` maps a normalized
-path to that route. URL parsing, scheme handling, dependency resolution and
-logging stay in the application.
+path to that route. ``Orbit/registerDeepLinkTab(_:pattern:)`` maps a path that is
+just a tab root. URL parsing, scheme handling, dependency resolution and logging
+stay in the application.
 
 Patterns are slash-separated. A segment beginning with `:` captures one path
 component, which is percent-decoded before it reaches the resolver. Matching is
@@ -208,6 +209,7 @@ func registerTaskLinks(in orbit: Orbit) {
     orbit.register(TaskRoute.self) { route in
         Text(route.taskID)
     }
+    orbit.registerDeepLinkTab(TasksTab(), pattern: "tasks")
     orbit.registerDeepLink(
         TaskRoute.self,
         pattern: "task/:id",
@@ -221,9 +223,10 @@ func registerTaskLinks(in orbit: Orbit) {
 
 The resolver may await application work such as loading an entity, and returns
 `nil` when the destination is unavailable. ``Orbit/openDeepLink(path:)`` resolves
-the route and applies the registered tab and presentation.
-``Orbit/resolveDeepLink(path:)`` returns the route without navigating when the
-application owns placement.
+the route and applies the registered tab and presentation. If the resolver
+returns `nil`, the registered tab root is selected; without a tab, navigation is
+unchanged. ``Orbit/resolveDeepLink(path:)`` returns a route without navigating
+when the application owns placement, and `nil` for tab-only paths.
 
 `openDeepLink` captures the root before awaiting, then verifies cancellation and
 root identity before navigating, so a stale request cannot move the user after

@@ -126,8 +126,8 @@ struct OrbitDeepLinkTests {
         #expect(tabs.context(for: TasksTab())?.path.isEmpty == true)
     }
 
-    @Test("An unavailable destination leaves navigation unchanged")
-    func unresolvedDestination() async throws {
+    @Test("An unavailable route falls back to its registered tab root")
+    func unresolvedDestinationFallsBack() async throws {
         let orbit = makeOrbit()
         orbit.registerDeepLink(
             TaskRoute.self,
@@ -135,11 +135,47 @@ struct OrbitDeepLinkTests {
             tab: TasksTab()
         ) { _ in nil }
 
+        #expect(await orbit.openDeepLink(path: "task/42"))
+        let tabs = try #require(orbit.rootContext.tabManager)
+        #expect(tabs.selectedTab == TasksTab())
+        #expect(tabs.context(for: TasksTab())?.path.isEmpty == true)
+        #expect(orbit.rootContext.presentation == nil)
+    }
+
+    @Test("An unavailable route without a tab leaves navigation unchanged")
+    func unresolvedDestinationWithoutTab() async throws {
+        let orbit = makeOrbit()
+        orbit.registerDeepLink(
+            TaskRoute.self,
+            pattern: "task/:id"
+        ) { _ in nil }
+
         #expect(!(await orbit.openDeepLink(path: "task/42")))
         let tabs = try #require(orbit.rootContext.tabManager)
         #expect(tabs.selectedTab == HomeTab())
+        #expect(tabs.context(for: HomeTab())?.path.isEmpty == true)
+    }
+
+    @Test("A tab-only path selects its tab root without resolving a route")
+    func tabOnlyPath() async throws {
+        let orbit = makeOrbit()
+        #expect(orbit.registerDeepLinkTab(TasksTab(), pattern: "tasks"))
+        #expect(await orbit.resolveDeepLink(path: "tasks") == nil)
+
+        #expect(await orbit.openDeepLink(path: "tasks"))
+        let tabs = try #require(orbit.rootContext.tabManager)
+        #expect(tabs.selectedTab == TasksTab())
         #expect(tabs.context(for: TasksTab())?.path.isEmpty == true)
-        #expect(orbit.rootContext.presentation == nil)
+    }
+
+    @Test("A tab-only path for an undeclared tab does not navigate")
+    func tabOnlyUnknownTab() async throws {
+        let orbit = makeOrbit()
+        #expect(orbit.registerDeepLinkTab(UnknownTab(), pattern: "unknown"))
+
+        #expect(!(await orbit.openDeepLink(path: "unknown")))
+        let tabs = try #require(orbit.rootContext.tabManager)
+        #expect(tabs.selectedTab == HomeTab())
     }
 
     @Test("Deep links require an already registered route")
@@ -182,6 +218,20 @@ struct OrbitDeepLinkTests {
                 pattern: "/task/:id/"
             ) { _ in TaskRoute(identifier: "duplicate") }
         )
+        #expect(!orbit.registerDeepLinkTab(TasksTab(), pattern: ""))
+    }
+
+    @Test("Tab and route registrations share duplicate detection")
+    func duplicateAcrossKinds() {
+        let orbit = makeOrbit()
+        #expect(orbit.registerDeepLinkTab(HomeTab(), pattern: "home"))
+        #expect(
+            !orbit.registerDeepLink(
+                TaskRoute.self,
+                pattern: "/home/"
+            ) { _ in TaskRoute(identifier: "duplicate") }
+        )
+        #expect(!orbit.registerDeepLinkTab(TasksTab(), pattern: "home"))
     }
 
     @Test("The first registered matching pattern wins")
@@ -322,3 +372,4 @@ nonisolated private final class TabsRoute: OrbitRoute {}
 nonisolated private final class UnregisteredRoute: OrbitRoute {}
 nonisolated private final class HomeTab: OrbitTab {}
 nonisolated private final class TasksTab: OrbitTab {}
+nonisolated private final class UnknownTab: OrbitTab {}

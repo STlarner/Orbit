@@ -14,7 +14,7 @@ Add `https://github.com/STlarner/Orbit.git` as an Xcode package dependency
 and select the `Orbit` product. For a SwiftPM project:
 
 ```swift
-.package(url: "https://github.com/STlarner/Orbit.git", exact: "0.6.0")
+.package(url: "https://github.com/STlarner/Orbit.git", exact: "0.7.0")
 ```
 
 Requires Swift 6.2+, iOS 17+ or macOS 14+.
@@ -185,6 +185,7 @@ func registerDetailLinks(in orbit: Orbit) {
     orbit.register(DetailRoute.self) { route in
         Text(route.title)
     }
+    orbit.registerDeepLinkTab(DetailTab(), pattern: "detail")
     orbit.registerDeepLink(
         DetailRoute.self,
         pattern: "detail/:id",
@@ -201,9 +202,12 @@ component, which is percent-decoded before it reaches the resolver. Matching is
 case-sensitive, the first registered pattern wins, and equivalent slash variants
 such as `task/:id`, `/task/:id` and `task/:id/` are one registration.
 
-`openDeepLink(path:)` resolves the route and applies the registered `tab` and
-`presentation`. `resolveDeepLink(path:)` returns the route without navigating,
-for applications that own placement:
+`registerDeepLinkTab` registers a path that selects a tab root without building a
+route. `openDeepLink(path:)` resolves a route and applies the registered `tab`
+and `presentation`. If a resolver returns `nil`, the registered tab root is
+selected; without a tab, navigation is unchanged. `resolveDeepLink(path:)`
+returns a route without navigating, for applications that own placement, and
+returns `nil` for tab-only paths:
 
 ```swift
 struct DetailWindow: View {

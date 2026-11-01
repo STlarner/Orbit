@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+## 0.7.0
+
+- Add `registerDeepLinkTab(_:pattern:)` for paths that select a tab root
+  without building a route.
+- `openDeepLink(path:)` now falls back to the registered tab root when a route
+  resolver returns `nil`. Without a tab, navigation stays unchanged.
+
 ## 0.6.0
 
 - Add opt-in deep links: `registerDeepLink(_:pattern:tab:presentation:resolve:)`,

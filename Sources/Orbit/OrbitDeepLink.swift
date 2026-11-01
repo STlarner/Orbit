@@ -88,21 +88,26 @@ struct OrbitDeepLinkPattern {
     }
 }
 
-/// Stores URL-to-route registrations for one scene owner.
+/// Stores URL-to-destination registrations for one scene owner.
 @MainActor
 final class DeepLinkRegistry {
+    enum Destination {
+        case route(
+            tab: OrbitTab?,
+            presentation: OrbitPresentationStyle?,
+            resolve: @MainActor (OrbitDeepLinkParameters) async -> OrbitRoute?
+        )
+        case tab(OrbitTab)
+    }
+
     struct Match {
         let parameters: OrbitDeepLinkParameters
-        let tab: OrbitTab?
-        let presentation: OrbitPresentationStyle?
-        let resolve: @MainActor (OrbitDeepLinkParameters) async -> OrbitRoute?
+        let destination: Destination
     }
 
     private struct Registration {
         let pattern: OrbitDeepLinkPattern
-        let tab: OrbitTab?
-        let presentation: OrbitPresentationStyle?
-        let resolve: @MainActor (OrbitDeepLinkParameters) async -> OrbitRoute?
+        let destination: Destination
     }
 
     private var registrations: [Registration] = []
@@ -111,9 +116,7 @@ final class DeepLinkRegistry {
     /// - Returns: `true` when stored, `false` for a duplicate pattern.
     func register(
         pattern: OrbitDeepLinkPattern,
-        tab: OrbitTab?,
-        presentation: OrbitPresentationStyle?,
-        resolve: @escaping @MainActor (OrbitDeepLinkParameters) async -> OrbitRoute?
+        destination: Destination
     ) -> Bool {
         guard !registrations.contains(where: {
             $0.pattern.source == pattern.source
@@ -122,9 +125,7 @@ final class DeepLinkRegistry {
         }
         registrations.append(Registration(
             pattern: pattern,
-            tab: tab,
-            presentation: presentation,
-            resolve: resolve
+            destination: destination
         ))
         return true
     }
@@ -137,9 +138,7 @@ final class DeepLinkRegistry {
             }
             return Match(
                 parameters: parameters,
-                tab: registration.tab,
-                presentation: registration.presentation,
-                resolve: registration.resolve
+                destination: registration.destination
             )
         }
         return nil
@@ -161,7 +160,8 @@ extension Orbit {
     ///   - type: Exact route type to build. It must already be registered.
     ///   - pattern: Pattern such as `"task/:id"`.
     ///   - tab: Optional root tab selected when ``openDeepLink(path:)`` applies
-    ///     the route. `nil` uses the current root tab or root stack.
+    ///     the route. It is also the fallback when the resolver returns `nil`.
+    ///     `nil` uses the current root tab or root stack.
     ///   - presentation: Optional modal style. `nil` pushes the route.
     ///   - resolve: Main-actor async closure that receives captured parameters
     ///     and returns the route, or `nil` when the destination is unavailable.
@@ -195,80 +195,128 @@ extension Orbit {
         }
         guard deepLinks.register(
             pattern: pattern,
-            tab: tab,
-            presentation: presentation,
-            resolve: resolveRoute
+            destination: .route(
+                tab: tab,
+                presentation: presentation,
+                resolve: resolveRoute
+            )
         ) else {
             return reject("Deep-link pattern already registered: \(pattern.source)")
         }
         return true
     }
 
-    /// Resolves a path without changing navigation.
+    /// Registers a path that selects a tab's root screen without pushing a
+    /// route.
     ///
-    /// The first registered matching pattern builds its route. Resolution may
-    /// await application work such as loading an entity. Unknown paths and
-    /// resolvers returning `nil` produce `nil`; this method does not emit a
-    /// rejection for an ordinary unmatched URL.
+    /// Use this for destinations that are just a tab, such as `"home"` or
+    /// `"tasks"`. Patterns follow the same slash, capture, normalization and
+    /// first-match rules as
+    /// ``registerDeepLink(_:pattern:tab:presentation:resolve:)``. A tab path and
+    /// a route path cannot share the same normalized pattern.
+    ///
+    /// - Parameters:
+    ///   - tab: Tab selected by ``openDeepLink(path:)``.
+    ///   - pattern: Pattern such as `"home"`.
+    /// - Returns: `true` when stored; `false` for an invalid or duplicate
+    ///   pattern, subject to the owner's diagnostics policy.
+    @discardableResult
+    public func registerDeepLinkTab(
+        _ tab: OrbitTab,
+        pattern: String
+    ) -> Bool {
+        guard let pattern = OrbitDeepLinkPattern(pattern) else {
+            return reject("Invalid deep-link pattern: \(pattern)")
+        }
+        guard deepLinks.register(
+            pattern: pattern,
+            destination: .tab(tab)
+        ) else {
+            return reject("Deep-link pattern already registered: \(pattern.source)")
+        }
+        return true
+    }
+
+    /// Resolves a route path without changing navigation.
+    ///
+    /// The first registered matching route pattern builds its route. Resolution
+    /// may await application work such as loading an entity. Unknown paths,
+    /// tab-only registrations and resolvers returning `nil` produce `nil`; this
+    /// method does not emit a rejection for an ordinary unmatched URL.
     ///
     /// - Parameter path: Normalized path such as `"task/42"`.
     /// - Returns: The resolved registered route, or `nil`.
     @MainActor
     public func resolveDeepLink(path: String) async -> OrbitRoute? {
         guard let match = deepLinks.match(path) else { return nil }
-        return await match.resolve(match.parameters)
+        guard case .route(_, _, let resolve) = match.destination else {
+            return nil
+        }
+        return await resolve(match.parameters)
     }
 
     /// Resolves a path and applies its registered tab and presentation policy.
     ///
-    /// Captures the current root, resolves the route, then verifies that the
-    /// request was not cancelled and the root did not change. The route is
-    /// pushed onto the registered tab (or the current root tab/stack). A
-    /// registered presentation is requested above the root; existing modals are
-    /// not dismissed. Validation failure leaves navigation unchanged, except
-    /// that a requested presentation is applied before selecting its tab in the
-    /// same event batch.
+    /// Captures the current root, resolves the destination, then verifies that
+    /// the request was not cancelled and the root did not change. A tab-only
+    /// registration selects its tab with an empty path. A route is pushed onto
+    /// the registered tab (or the current root tab/stack); when its resolver
+    /// returns `nil`, the registered tab's root is selected if a tab was
+    /// provided, otherwise navigation is unchanged. A registered presentation
+    /// is requested above the root; existing modals are not dismissed.
+    /// Validation failure leaves navigation unchanged, except that a requested
+    /// presentation is applied before selecting its tab in the same event batch.
     ///
     /// - Parameter path: Normalized path such as `"task/42"`.
     /// - Returns: `true` when navigation was applied; `false` for an unknown
-    ///   path, an unavailable destination, cancellation, root replacement or a
-    ///   rejected command.
+    ///   path, an unavailable destination without a fallback tab, cancellation,
+    ///   root replacement or a rejected command.
     @discardableResult
     @MainActor
     public func openDeepLink(path: String) async -> Bool {
         guard let root = rootRoute else { return false }
         guard let match = deepLinks.match(path) else { return false }
-        guard let route = await match.resolve(match.parameters) else {
-            return false
-        }
-        guard !Task.isCancelled, rootRoute === root else { return false }
-        guard registry.registration(for: route) != nil else {
-            return reject(
-                "Deep link resolved to an unregistered route: \(route.name)"
-            )
-        }
 
-        let targetTab = match.tab ?? rootContext.tabManager?.selectedTab
-        if let targetTab {
-            if let presentation = match.presentation {
-                guard let manager = rootContext.tabManager,
-                    let context = manager.contexts[targetTab],
-                    context.canSetPath([])
-                else {
+        switch match.destination {
+        case .tab(let tab):
+            guard !Task.isCancelled, rootRoute === root else { return false }
+            return selectTab(tab, replacingPath: [])
+        case .route(let tab, let presentation, let resolve):
+            guard let route = await resolve(match.parameters) else {
+                guard !Task.isCancelled, rootRoute === root, let tab else {
                     return false
                 }
-                return mutate {
-                    guard present(route, style: presentation) else {
+                return selectTab(tab, replacingPath: [])
+            }
+            guard !Task.isCancelled, rootRoute === root else { return false }
+            guard registry.registration(for: route) != nil else {
+                return reject(
+                    "Deep link resolved to an unregistered route: \(route.name)"
+                )
+            }
+
+            let targetTab = tab ?? rootContext.tabManager?.selectedTab
+            if let targetTab {
+                if let presentation {
+                    guard let manager = rootContext.tabManager,
+                        let context = manager.contexts[targetTab],
+                        context.canSetPath([])
+                    else {
                         return false
                     }
-                    return selectTab(targetTab, replacingPath: [])
+                    return mutate {
+                        guard present(route, style: presentation) else {
+                            return false
+                        }
+                        return selectTab(targetTab, replacingPath: [])
+                    }
                 }
+                return selectTab(targetTab, replacingPath: [route])
             }
-            return selectTab(targetTab, replacingPath: [route])
+            if let presentation {
+                return present(route, style: presentation)
+            }
+            return rootContext.push(route)
         }
-        if let presentation = match.presentation {
-            return present(route, style: presentation)
-        }
-        return rootContext.push(route)
     }
 }
